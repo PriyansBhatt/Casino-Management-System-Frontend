@@ -13,24 +13,44 @@ const emptyCustomerForm = {
   remarks: '',
 }
 
-const mapBackendCustomer = (customer) => ({
-  id: customer.id,
-  cid: customer.customerCode,
-  name: customer.fullName,
-  initials: getInitials(customer.fullName),
-  nationality: customer.nationality,
-  contact: customer.phone,
-  status: customer.status,
-  address: '—',
-  idType: '—',
-  idNumber: '—',
-  visits: 0,
-  lifetimeBuyIn: null,
-  lifetimeCashOut: null,
-  category: '—',
-  lastVisit: 'No visits',
-  remarks: '',
-})
+const mapBackendCustomer = (customer) => {
+  const backendVisitCount = Number(customer.totalVisits)
+  const visits = Number.isFinite(backendVisitCount) && backendVisitCount >= 0
+    ? Math.trunc(backendVisitCount)
+    : 0
+  const lastVisitBusinessDate =
+    typeof customer.lastVisitBusinessDate === 'string' &&
+    customer.lastVisitBusinessDate.trim()
+      ? customer.lastVisitBusinessDate
+      : null
+
+  return {
+    id: customer.id,
+    cid: customer.customerCode,
+    name: customer.fullName,
+    initials: getInitials(customer.fullName),
+    nationality: customer.nationality,
+    contact: customer.phone,
+    status: customer.status,
+    address: '—',
+    idType: '—',
+    idNumber: '—',
+    visits,
+    lifetimeBuyIn: null,
+    lifetimeCashOut: null,
+    category: '—',
+    lastVisit: visits > 0 && lastVisitBusinessDate
+      ? lastVisitBusinessDate
+      : 'No visits',
+    lastEntryTime:
+      typeof customer.lastEntryTime === 'string'
+        ? customer.lastEntryTime
+        : null,
+    hasActiveSession: customer.hasActiveSession === true,
+    activeSessionId: customer.activeSessionId || null,
+    remarks: '',
+  }
+}
 
 const CustomersKyc = () => {
   const [customers, setCustomers] = useState([])
@@ -79,7 +99,10 @@ const CustomersKyc = () => {
   const summary = useMemo(() => {
     return {
       totalCustomers: customers.length,
-      totalVisits: '—',
+      totalVisits: customers.reduce(
+        (total, customer) => total + customer.visits,
+        0,
+      ),
       vipCustomers: '—',
       totalBuyIn: '—',
       totalCashOut: '—',
@@ -635,9 +658,24 @@ const CustomersKyc = () => {
                           </span>
 
                           <div>
-                            <p className="text-sm font-black text-slate-950">
-                              {customer.name}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-black text-slate-950">
+                                {customer.name}
+                              </p>
+
+                              {customer.hasActiveSession && (
+                                <span
+                                  title={
+                                    customer.activeSessionId
+                                      ? `Active session ${customer.activeSessionId}`
+                                      : 'Customer has an active session'
+                                  }
+                                  className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-700"
+                                >
+                                  Currently inside
+                                </span>
+                              )}
+                            </div>
 
                             <p className="mt-0.5 text-xs text-slate-500">
                               {customer.category}
