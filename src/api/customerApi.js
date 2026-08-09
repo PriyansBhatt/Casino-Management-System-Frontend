@@ -97,6 +97,15 @@ export const customerApi = {
     return response.data
   },
 
+  registerCustomer: async ({ fullName, phone, nationality }) => {
+    const response = await axiosInstance.post('/customers', {
+      fullName,
+      phone,
+      nationality,
+    })
+    return response.data
+  },
+
   updateCustomer: async (id, payload) => {
     if (isMockCustomersEnabled()) {
       await wait()
@@ -136,6 +145,7 @@ export const customerApi = {
 export const getCustomers = customerApi.getCustomers
 export const getCustomerById = customerApi.getCustomerById
 export const createCustomer = customerApi.createCustomer
+export const registerCustomer = customerApi.registerCustomer
 export const updateCustomer = customerApi.updateCustomer
 export const searchCustomers = customerApi.searchCustomers
 
