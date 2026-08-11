@@ -36,7 +36,11 @@ axiosInstance.interceptors.response.use(
       }
     }
 
-    if (normalizedError.status === 403 && currentPath !== '/unauthorized') {
+    if (
+      normalizedError.status === 403 &&
+      !error.config?.skipUnauthorizedRedirect &&
+      currentPath !== '/unauthorized'
+    ) {
       window.location.assign('/unauthorized')
     }
 
