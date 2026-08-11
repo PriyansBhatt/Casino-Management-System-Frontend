@@ -1,7 +1,25 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
+import useAuth from '../../hooks/useAuth'
 import Sidebar from './Sidebar'
 
 const MainLayout = ({ children }) => {
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
+
+  const displayName = user?.fullName || user?.name || user?.username || 'Authenticated User'
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Sidebar />
@@ -39,20 +57,21 @@ const MainLayout = ({ children }) => {
             </button>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-300 bg-yellow-50 text-sm font-extrabold text-yellow-700">
-              SA
+              {initials || 'AU'}
             </div>
 
             <div className="hidden leading-tight sm:block">
               <p className="text-sm font-extrabold text-slate-950">
-                Super Admin
+                {displayName}
               </p>
               <p className="text-xs font-bold uppercase text-yellow-700">
-                SUPER_ADMIN
+                {user?.role || 'NO ROLE'}
               </p>
             </div>
 
             <button
               type="button"
+              onClick={handleLogout}
               className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
               Logout

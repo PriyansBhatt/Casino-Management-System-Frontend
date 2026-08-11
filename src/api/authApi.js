@@ -92,7 +92,22 @@ const mockLogin = async (username, password) => {
 const loginViaAPI = async (credentials) => {
   try {
     const response = await axiosInstance.post('/auth/login', credentials)
-    return response.data
+    const responseBody = response.data
+
+    if (responseBody?.success !== true) {
+      throw new Error(responseBody?.message || 'Login failed')
+    }
+
+    const backendData = responseBody.data
+
+    return {
+      token: backendData.token,
+      user: {
+        username: backendData.username,
+        role: backendData.role,
+        status: backendData.status,
+      },
+    }
   } catch (error) {
     if (error.response?.data?.message) {
       throw new Error(error.response.data.message)

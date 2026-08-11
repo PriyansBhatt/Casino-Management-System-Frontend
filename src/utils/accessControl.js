@@ -14,6 +14,24 @@ const routePatternMatches = (pattern, pathname) => {
   })
 }
 
+const RECEPTIONIST_ROUTE_PATTERNS = [
+  '/reception',
+  '/reception/gate',
+  '/reception/register',
+  '/reception/customer/:id',
+  '/reception/customer/:id/edit',
+  '/customers',
+  '/customers/kyc',
+  '/customers/register',
+  '/customers/:id',
+  '/customers/:id/edit',
+]
+
+const isReceptionistRoute = (pathname) =>
+  RECEPTIONIST_ROUTE_PATTERNS.some((pattern) =>
+    routePatternMatches(pattern, pathname)
+  )
+
 const getAllowedRolesForPath = (pathname) => {
   if (ROUTE_PERMISSIONS[pathname]) {
     return ROUTE_PERMISSIONS[pathname]
@@ -49,6 +67,10 @@ export function canAccessRoute(user, pathname) {
     return true
   }
 
+  if (user.role === ROLES.RECEPTIONIST) {
+    return isReceptionistRoute(pathname)
+  }
+
   const allowedRoles = getAllowedRolesForPath(pathname)
 
   if (!allowedRoles) {
@@ -65,7 +87,7 @@ export function getDefaultRouteForRole(role) {
     case ROLES.ADMIN:
       return '/dashboard'
     case ROLES.RECEPTIONIST:
-      return '/reception/customers/search'
+      return '/reception'
     case ROLES.CASHIER:
       return '/cashier/buy-in'
     case ROLES.PIT_BOSS:
