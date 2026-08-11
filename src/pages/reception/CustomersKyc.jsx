@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getCustomers, registerCustomer } from '../../api/customerApi'
+import {
+  createIdentityDocument,
+  getCustomerIdentityDocuments,
+  getCustomerKyc,
+  getCustomers,
+  getPrivilegedCustomerKyc,
+  registerCustomer,
+  updateCustomerClassification,
+  updateCustomerKyc,
+} from '../../api/customerApi'
 import { getErrorMessage, isNetworkError } from '../../utils/errorUtils'
+import useAuth from '../../hooks/useAuth'
+import { ROLES } from '../../constants/roles'
 
 const emptyCustomerForm = {
   fullName: '',
@@ -11,6 +22,30 @@ const emptyCustomerForm = {
   idNumber: '',
   category: 'Normal',
   remarks: '',
+}
+
+const emptyKycForm = {
+  dateOfBirth: '',
+  gender: '',
+  permanentAddress: '',
+  currentAddress: '',
+  email: '',
+  occupation: '',
+}
+
+const emptyIdentityForm = {
+  documentType: '',
+  documentNumber: '',
+  issuingCountry: '',
+  issuedDate: '',
+  expiryDate: '',
+  primaryDocument: false,
+}
+
+const emptyClassificationForm = {
+  category: 'NORMAL',
+  riskLevel: 'LOW',
+  internalNotes: '',
 }
 
 const mapBackendCustomer = (customer) => {
@@ -53,6 +88,7 @@ const mapBackendCustomer = (customer) => {
 }
 
 const CustomersKyc = () => {
+  const { user } = useAuth()
   const [customers, setCustomers] = useState([])
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true)
   const [customersError, setCustomersError] = useState(null)
@@ -65,6 +101,17 @@ const CustomersKyc = () => {
 
   const [showCustomerModal, setShowCustomerModal] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [customerProfile, setCustomerProfile] = useState(null)
+  const [privilegedProfile, setPrivilegedProfile] = useState(null)
+  const [identityDocuments, setIdentityDocuments] = useState([])
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false)
+  const [profileError, setProfileError] = useState(null)
+  const [profileAction, setProfileAction] = useState(null)
+  const [profileActionError, setProfileActionError] = useState(null)
+  const [kycForm, setKycForm] = useState(emptyKycForm)
+  const [identityForm, setIdentityForm] = useState(emptyIdentityForm)
+  const [classificationForm, setClassificationForm] = useState(emptyClassificationForm)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
 
   const [customerForm, setCustomerForm] = useState(emptyCustomerForm)
@@ -72,7 +119,12 @@ const CustomersKyc = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const isDirectorView = viewMode === 'DIRECTOR'
+  const canViewPrivileged = [ROLES.DIRECTOR, ROLES.SUPER_ADMIN].includes(user?.role)
+  const isDirectorView = canViewPrivileged && viewMode === 'DIRECTOR'
+
+  useEffect(() => {
+    setViewMode(canViewPrivileged ? 'DIRECTOR' : 'RECEPTION')
+  }, [canViewPrivileged])
 
   const loadCustomers = useCallback(async () => {
     setIsLoadingCustomers(true)
@@ -153,6 +205,163 @@ const CustomersKyc = () => {
     window.setTimeout(() => {
       setToast(null)
     }, 3000)
+  }
+
+  const profileRequestError = (error, fallback) => {
+    const status = error.response?.status ?? error.normalized?.status
+    if (status === 400) return getErrorMessage(error) || 'Please check the entered details.'
+    if (status === 401) return 'Your session has expired. Please sign in again.'
+    if (status === 403) return 'You are not authorized to perform this customer KYC action.'
+    if (status === 404) return 'The customer record could not be found.'
+    if (status === 409) return getErrorMessage(error) || 'This identity document already exists.'
+    if (isNetworkError(error)) return 'The backend is unavailable. Please try again when the server is running.'
+    return getErrorMessage(error) || fallback
+  }
+
+  const applyKycForm = (profile) => {
+    setKycForm({
+      dateOfBirth: profile?.dateOfBirth || '',
+      gender: profile?.gender || '',
+      permanentAddress: profile?.permanentAddress || '',
+      currentAddress: profile?.currentAddress || '',
+      email: profile?.email || '',
+      occupation: profile?.occupation || '',
+    })
+  }
+
+  const applyClassificationForm = (profile) => {
+    setClassificationForm({
+      category: profile?.category || 'NORMAL',
+      riskLevel: profile?.riskLevel || 'LOW',
+      internalNotes: profile?.internalNotes || '',
+    })
+  }
+
+  const loadCustomerProfile = async (customer, privileged = isDirectorView) => {
+    setIsLoadingProfile(true)
+    setProfileError(null)
+    setProfileActionError(null)
+
+    try {
+      const basic = await getCustomerKyc(customer.id)
+      setCustomerProfile(basic)
+      applyKycForm(basic)
+
+      if (privileged && canViewPrivileged) {
+        const [privilegedData, documents] = await Promise.all([
+          getPrivilegedCustomerKyc(customer.id),
+          getCustomerIdentityDocuments(customer.id),
+        ])
+        setPrivilegedProfile(privilegedData)
+        setIdentityDocuments(Array.isArray(documents) ? documents : [])
+        applyClassificationForm(privilegedData)
+      } else {
+        setPrivilegedProfile(null)
+        setIdentityDocuments([])
+      }
+    } catch (error) {
+      setProfileError(profileRequestError(error, 'Unable to load the customer profile.'))
+    } finally {
+      setIsLoadingProfile(false)
+    }
+  }
+
+  const openCustomerProfile = (customer) => {
+    setSelectedCustomer(customer)
+    setCustomerProfile(null)
+    setPrivilegedProfile(null)
+    setIdentityDocuments([])
+    setProfileAction(null)
+    setIdentityForm(emptyIdentityForm)
+    loadCustomerProfile(customer)
+  }
+
+  const closeCustomerProfile = () => {
+    if (isSavingProfile) return
+    setSelectedCustomer(null)
+    setCustomerProfile(null)
+    setPrivilegedProfile(null)
+    setIdentityDocuments([])
+    setProfileAction(null)
+    setProfileError(null)
+    setProfileActionError(null)
+  }
+
+  const saveBasicKyc = async () => {
+    setIsSavingProfile(true)
+    setProfileActionError(null)
+    try {
+      const updated = await updateCustomerKyc(selectedCustomer.id, {
+        dateOfBirth: kycForm.dateOfBirth || null,
+        gender: kycForm.gender.trim() || null,
+        permanentAddress: kycForm.permanentAddress.trim() || null,
+        currentAddress: kycForm.currentAddress.trim() || null,
+        email: kycForm.email.trim() || null,
+        occupation: kycForm.occupation.trim() || null,
+      })
+      setCustomerProfile(updated)
+      applyKycForm(updated)
+      setProfileAction(null)
+      showToast('Customer KYC updated successfully.')
+    } catch (error) {
+      setProfileActionError(profileRequestError(error, 'Unable to update customer KYC.'))
+    } finally {
+      setIsSavingProfile(false)
+    }
+  }
+
+  const saveIdentityDocument = async () => {
+    const errors = []
+    if (!identityForm.documentType) errors.push('Document type is required.')
+    if (!identityForm.documentNumber.trim()) errors.push('Document number is required.')
+    if (identityForm.issuedDate && identityForm.expiryDate && identityForm.expiryDate < identityForm.issuedDate) {
+      errors.push('Expiry date cannot be before issue date.')
+    }
+    if (errors.length) {
+      setProfileActionError(errors.join(' '))
+      return
+    }
+
+    setIsSavingProfile(true)
+    setProfileActionError(null)
+    try {
+      await createIdentityDocument(selectedCustomer.id, {
+        documentType: identityForm.documentType,
+        documentNumber: identityForm.documentNumber.trim(),
+        issuingCountry: identityForm.issuingCountry.trim() || null,
+        issuedDate: identityForm.issuedDate || null,
+        expiryDate: identityForm.expiryDate || null,
+        primaryDocument: identityForm.primaryDocument,
+      })
+      setIdentityForm(emptyIdentityForm)
+      setProfileAction(null)
+      await loadCustomerProfile(selectedCustomer)
+      showToast('Identity document added successfully.')
+    } catch (error) {
+      setProfileActionError(profileRequestError(error, 'Unable to add the identity document.'))
+    } finally {
+      setIsSavingProfile(false)
+    }
+  }
+
+  const saveClassification = async () => {
+    setIsSavingProfile(true)
+    setProfileActionError(null)
+    try {
+      const updated = await updateCustomerClassification(selectedCustomer.id, {
+        category: classificationForm.category,
+        riskLevel: classificationForm.riskLevel,
+        internalNotes: classificationForm.internalNotes.trim() || null,
+      })
+      setPrivilegedProfile(updated)
+      applyClassificationForm(updated)
+      setProfileAction(null)
+      showToast('Customer classification updated successfully.')
+    } catch (error) {
+      setProfileActionError(profileRequestError(error, 'Unable to update customer classification.'))
+    } finally {
+      setIsSavingProfile(false)
+    }
   }
 
   const validateForm = () => {
@@ -437,17 +646,19 @@ const CustomersKyc = () => {
                 Reception User
               </button>
 
-              <button
-                type="button"
-                onClick={() => setViewMode('DIRECTOR')}
-                className={`rounded-lg px-4 py-2 text-sm font-black transition ${
-                  viewMode === 'DIRECTOR'
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:bg-white'
-                }`}
-              >
-                Director / Admin
-              </button>
+              {canViewPrivileged && (
+                <button
+                  type="button"
+                  onClick={() => setViewMode('DIRECTOR')}
+                  className={`rounded-lg px-4 py-2 text-sm font-black transition ${
+                    viewMode === 'DIRECTOR'
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  Director / Admin
+                </button>
+              )}
             </div>
 
             <button
@@ -716,7 +927,7 @@ const CustomersKyc = () => {
                       <td className="px-4 py-4">
                         <button
                           type="button"
-                          onClick={() => setSelectedCustomer(customer)}
+                          onClick={() => openCustomerProfile(customer)}
                           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
                         >
                           View Profile
@@ -1007,15 +1218,15 @@ const CustomersKyc = () => {
       )}
 
       {selectedCustomer && (
-        <ModalOverlay onClose={() => setSelectedCustomer(null)}>
-          <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <ModalOverlay onClose={closeCustomerProfile}>
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <ModalHeader
               title="Customer Profile"
-              description="Permanent customer master and visit information."
-              onClose={() => setSelectedCustomer(null)}
+              description={isDirectorView ? 'Authorized customer KYC and classification view.' : 'Reception-safe customer KYC and visit information.'}
+              onClose={closeCustomerProfile}
             />
 
-            <div className="max-h-[75vh] space-y-5 overflow-y-auto p-5">
+            <div className="max-h-[78vh] space-y-5 overflow-y-auto p-5">
               <div className="flex items-start gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xl font-black text-amber-700">
                   {selectedCustomer.initials}
@@ -1032,86 +1243,134 @@ const CustomersKyc = () => {
                   </p>
                 </div>
 
-                <CategoryBadge category={selectedCustomer.category} />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <DetailCard
-                  label="Contact"
-                  value={selectedCustomer.contact}
-                />
-
-                <DetailCard
-                  label="Address"
-                  value={selectedCustomer.address}
-                />
-
-                <DetailCard
-                  label="Identification"
-                  value={`${selectedCustomer.idType} · ${selectedCustomer.idNumber}`}
-                />
-
-                <DetailCard
-                  label="Total Visits"
-                  value={selectedCustomer.visits}
-                />
-
-                <DetailCard
-                  label="Last Visit"
-                  value={selectedCustomer.lastVisit}
-                />
-
-                <DetailCard
-                  label="Customer Category"
-                  value={selectedCustomer.category}
-                />
-
-                {isDirectorView && (
-                  <>
-                    <DetailCard
-                      label="Lifetime Buy-In"
-                      value="—"
-                    />
-
-                    <DetailCard
-                      label="Lifetime Cash-Out"
-                      value="—"
-                    />
-
-                    <DetailCard
-                      label="Customer Net Position"
-                      value="—"
-                    />
-                  </>
+                {isDirectorView && privilegedProfile?.category && (
+                  <CategoryBadge category={privilegedProfile.category} />
                 )}
-
-                <div className="sm:col-span-2">
-                  <DetailCard
-                    label="Remarks"
-                    value={
-                      selectedCustomer.remarks ||
-                      'No customer remarks recorded.'
-                    }
-                  />
-                </div>
               </div>
+
+              {isLoadingProfile && (
+                <div className="rounded-xl border border-slate-200 p-10 text-center text-sm font-black text-slate-600">Loading customer profile...</div>
+              )}
+
+              {profileError && !isLoadingProfile && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                  {profileError}
+                  <button type="button" onClick={() => loadCustomerProfile(selectedCustomer)} className="ml-3 font-black underline">Retry</button>
+                </div>
+              )}
+
+              {customerProfile && !isLoadingProfile && (
+                <>
+                  <ProfileSection title="Basic customer information">
+                    <DetailGrid fields={[
+                      ['Customer code', customerProfile.customerCode],
+                      ['Full name', customerProfile.fullName],
+                      ['Phone', customerProfile.phone],
+                      ['Nationality', customerProfile.nationality],
+                      ['Customer status', customerProfile.status],
+                      ['KYC status', customerProfile.kycStatus],
+                    ]} />
+                  </ProfileSection>
+
+                  <ProfileSection title="KYC details" action={(
+                    <button type="button" onClick={() => { setProfileAction('KYC'); setProfileActionError(null) }} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white">Edit KYC</button>
+                  )}>
+                    {profileAction === 'KYC' ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <InputField label="Date of Birth" type="date" value={kycForm.dateOfBirth} onChange={(value) => setKycForm((current) => ({ ...current, dateOfBirth: value }))} />
+                        <InputField label="Gender" value={kycForm.gender} onChange={(value) => setKycForm((current) => ({ ...current, gender: value }))} />
+                        <InputField label="Email" type="email" value={kycForm.email} onChange={(value) => setKycForm((current) => ({ ...current, email: value }))} />
+                        <InputField label="Occupation" value={kycForm.occupation} onChange={(value) => setKycForm((current) => ({ ...current, occupation: value }))} />
+                        <InputField label="Permanent Address" value={kycForm.permanentAddress} onChange={(value) => setKycForm((current) => ({ ...current, permanentAddress: value }))} />
+                        <InputField label="Current Address" value={kycForm.currentAddress} onChange={(value) => setKycForm((current) => ({ ...current, currentAddress: value }))} />
+                        <ActionFeedback message={profileActionError} />
+                        <FormActions saving={isSavingProfile} onCancel={() => { setProfileAction(null); setProfileActionError(null); applyKycForm(customerProfile) }} onSave={saveBasicKyc} />
+                      </div>
+                    ) : (
+                      <DetailGrid fields={[
+                        ['Date of birth', customerProfile.dateOfBirth],
+                        ['Gender', customerProfile.gender],
+                        ['Permanent address', customerProfile.permanentAddress],
+                        ['Current address', customerProfile.currentAddress],
+                        ['Email', customerProfile.email],
+                        ['Occupation', customerProfile.occupation],
+                      ]} />
+                    )}
+                  </ProfileSection>
+
+                  <ProfileSection title="Visit information">
+                    <DetailGrid fields={[
+                      ['Total visits', safeNumber(customerProfile.totalVisits)],
+                      ['Last visit business date', customerProfile.lastVisitBusinessDate || 'No visits'],
+                      ['Last entry time', formatDateTime(customerProfile.lastEntryTime)],
+                      ['Currently inside', customerProfile.hasActiveSession ? 'Yes' : 'No'],
+                      ['Active session', customerProfile.activeSessionId],
+                    ]} />
+                  </ProfileSection>
+
+                  <ProfileSection title="Identity" action={(
+                    <button type="button" onClick={() => { setProfileAction('IDENTITY'); setProfileActionError(null) }} className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950">Add Identity Document</button>
+                  )}>
+                    {profileAction === 'IDENTITY' ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <SelectField label="Document Type" required value={identityForm.documentType} options={['PASSPORT', 'CITIZENSHIP', 'NATIONAL_ID', 'DRIVING_LICENCE', 'OTHER']} onChange={(value) => setIdentityForm((current) => ({ ...current, documentType: value }))} />
+                        <InputField label="Document Number" required value={identityForm.documentNumber} onChange={(value) => setIdentityForm((current) => ({ ...current, documentNumber: value }))} />
+                        <InputField label="Issuing Country" value={identityForm.issuingCountry} onChange={(value) => setIdentityForm((current) => ({ ...current, issuingCountry: value }))} />
+                        <InputField label="Issue Date" type="date" value={identityForm.issuedDate} onChange={(value) => setIdentityForm((current) => ({ ...current, issuedDate: value }))} />
+                        <InputField label="Expiry Date" type="date" value={identityForm.expiryDate} onChange={(value) => setIdentityForm((current) => ({ ...current, expiryDate: value }))} />
+                        <label className="flex items-center gap-2 self-end rounded-lg border border-slate-200 px-3 py-3 text-sm font-bold text-slate-700"><input type="checkbox" checked={identityForm.primaryDocument} onChange={(event) => setIdentityForm((current) => ({ ...current, primaryDocument: event.target.checked }))} /> Primary document</label>
+                        <ActionFeedback message={profileActionError} />
+                        <FormActions saving={isSavingProfile} onCancel={() => { setProfileAction(null); setProfileActionError(null); setIdentityForm(emptyIdentityForm) }} onSave={saveIdentityDocument} />
+                      </div>
+                    ) : (
+                      <>
+                        <DetailGrid fields={identityFields(customerProfile.primaryIdentityDocument)} />
+                        <p className="mt-3 text-xs font-bold text-slate-500">{customerProfile.photoAvailable ? 'Photo available' : 'No photo uploaded'}</p>
+                      </>
+                    )}
+                  </ProfileSection>
+
+                  {isDirectorView && canViewPrivileged && privilegedProfile && (
+                    <>
+                      <ProfileSection title="Privileged classification" action={(
+                        <button type="button" onClick={() => { setProfileAction('CLASSIFICATION'); setProfileActionError(null) }} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white">Edit Classification</button>
+                      )}>
+                        {profileAction === 'CLASSIFICATION' ? (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <SelectField label="Category" value={classificationForm.category} options={['NORMAL', 'VIP', 'VVIP']} onChange={(value) => setClassificationForm((current) => ({ ...current, category: value }))} />
+                            <SelectField label="Risk Level" value={classificationForm.riskLevel} options={['LOW', 'MEDIUM', 'HIGH']} onChange={(value) => setClassificationForm((current) => ({ ...current, riskLevel: value }))} />
+                            <label className="sm:col-span-2"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Internal Notes</span><textarea rows={4} maxLength={4000} value={classificationForm.internalNotes} onChange={(event) => setClassificationForm((current) => ({ ...current, internalNotes: event.target.value }))} className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-amber-400" /></label>
+                            <ActionFeedback message={profileActionError} />
+                            <FormActions saving={isSavingProfile} onCancel={() => { setProfileAction(null); setProfileActionError(null); applyClassificationForm(privilegedProfile) }} onSave={saveClassification} />
+                          </div>
+                        ) : (
+                          <DetailGrid fields={[
+                            ['Category', privilegedProfile.category],
+                            ['Risk level', privilegedProfile.riskLevel],
+                            ['Internal notes', privilegedProfile.internalNotes],
+                            ['Created at', formatDateTime(privilegedProfile.createdAt)],
+                            ['Updated at', formatDateTime(privilegedProfile.updatedAt)],
+                          ]} />
+                        )}
+                      </ProfileSection>
+
+                      <ProfileSection title="Identity document history">
+                        <DocumentHistory documents={identityDocuments} />
+                      </ProfileSection>
+                    </>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4">
               <button
                 type="button"
-                onClick={() => setSelectedCustomer(null)}
+                onClick={closeCustomerProfile}
+                disabled={isSavingProfile}
                 className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100"
               >
                 Close
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openEditCustomerModal(selectedCustomer)}
-                className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-black text-white hover:bg-slate-800"
-              >
-                Edit Customer
               </button>
             </div>
           </div>
@@ -1223,6 +1482,7 @@ const InputField = ({
   label,
   value,
   onChange,
+  type = 'text',
   placeholder,
   required,
   error,
@@ -1234,7 +1494,7 @@ const InputField = ({
     </span>
 
     <input
-      type="text"
+      type={type}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
@@ -1332,6 +1592,94 @@ const DetailCard = ({ label, value }) => (
     </p>
   </div>
 )
+
+const ProfileSection = ({ title, action, children }) => (
+  <section className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <h3 className="text-xs font-black uppercase tracking-[0.16em] text-slate-700">{title}</h3>
+      {action}
+    </div>
+    {children}
+  </section>
+)
+
+const DetailGrid = ({ fields }) => (
+  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    {fields.map(([label, value]) => (
+      <DetailCard key={label} label={label} value={displayValue(value)} />
+    ))}
+  </div>
+)
+
+const ActionFeedback = ({ message }) => message ? (
+  <div className="sm:col-span-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{message}</div>
+) : null
+
+const FormActions = ({ saving, onCancel, onSave }) => (
+  <div className="flex justify-end gap-2 sm:col-span-2">
+    <button type="button" disabled={saving} onClick={onCancel} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancel</button>
+    <button type="button" disabled={saving} onClick={onSave} className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving...' : 'Save'}</button>
+  </div>
+)
+
+const DocumentHistory = ({ documents }) => {
+  if (!documents.length) {
+    return <p className="text-sm font-semibold text-slate-500">No identity document history.</p>
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-[1200px] w-full border-collapse text-left text-xs">
+        <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-wide text-slate-500">
+          <tr>{['Type', 'Document number', 'Country', 'Issued', 'Expiry', 'Primary', 'Status', 'Created by', 'Created at', 'Verified by', 'Verified at', 'Updated at'].map((heading) => <th key={heading} className="border-b border-slate-200 px-3 py-2">{heading}</th>)}</tr>
+        </thead>
+        <tbody>
+          {documents.map((document) => (
+            <tr key={document.id} className="border-b border-slate-100 text-slate-700">
+              <td className="px-3 py-3 font-bold">{displayValue(document.documentType)}</td>
+              <td className="px-3 py-3 font-mono">{displayValue(document.documentNumber)}</td>
+              <td className="px-3 py-3">{displayValue(document.issuingCountry)}</td>
+              <td className="px-3 py-3">{displayValue(document.issuedDate)}</td>
+              <td className="px-3 py-3">{displayValue(document.expiryDate)}</td>
+              <td className="px-3 py-3">{document.primaryDocument ? 'Yes' : 'No'}</td>
+              <td className="px-3 py-3">{displayValue(document.status)}</td>
+              <td className="px-3 py-3">{displayValue(document.createdBy?.username)}</td>
+              <td className="px-3 py-3">{formatDateTime(document.createdAt)}</td>
+              <td className="px-3 py-3">{displayValue(document.verifiedBy?.username)}</td>
+              <td className="px-3 py-3">{formatDateTime(document.verifiedAt)}</td>
+              <td className="px-3 py-3">{formatDateTime(document.updatedAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const identityFields = (document) => document ? [
+  ['Document type', document.documentType],
+  ['Document number', document.documentNumber],
+  ['Issuing country', document.issuingCountry],
+  ['Issue date', document.issuedDate],
+  ['Expiry date', document.expiryDate],
+  ['Document status', document.status],
+] : [['Primary identity document', 'No active primary identity document']]
+
+const displayValue = (value) => {
+  if (value === null || value === undefined || value === '') return '—'
+  return String(value)
+}
+
+const safeNumber = (value) => {
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : 0
+}
+
+const formatDateTime = (value) => {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString()
+}
 
 const formatNpr = (value) =>
   `NPR ${Number(value).toLocaleString('en-IN')}`

@@ -140,6 +140,56 @@ export const customerApi = {
     })
     return response.data
   },
+
+  getCustomerKyc: async (customerId) => {
+    const response = await axiosInstance.get(`/customers/${customerId}/kyc`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data
+  },
+
+  updateCustomerKyc: async (customerId, payload) => {
+    const response = await axiosInstance.patch(
+      `/customers/${customerId}/kyc`,
+      payload,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data
+  },
+
+  createIdentityDocument: async (customerId, payload) => {
+    const response = await axiosInstance.post(
+      `/customers/${customerId}/identity-documents`,
+      payload,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data
+  },
+
+  getPrivilegedCustomerKyc: async (customerId) => {
+    const response = await axiosInstance.get(
+      `/customers/${customerId}/kyc/privileged`,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data
+  },
+
+  getCustomerIdentityDocuments: async (customerId) => {
+    const response = await axiosInstance.get(
+      `/customers/${customerId}/identity-documents`,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data
+  },
+
+  updateCustomerClassification: async (customerId, payload) => {
+    const response = await axiosInstance.patch(
+      `/customers/${customerId}/classification`,
+      payload,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data
+  },
 }
 
 export const getCustomers = customerApi.getCustomers
@@ -148,5 +198,11 @@ export const createCustomer = customerApi.createCustomer
 export const registerCustomer = customerApi.registerCustomer
 export const updateCustomer = customerApi.updateCustomer
 export const searchCustomers = customerApi.searchCustomers
+export const getCustomerKyc = customerApi.getCustomerKyc
+export const updateCustomerKyc = customerApi.updateCustomerKyc
+export const createIdentityDocument = customerApi.createIdentityDocument
+export const getPrivilegedCustomerKyc = customerApi.getPrivilegedCustomerKyc
+export const getCustomerIdentityDocuments = customerApi.getCustomerIdentityDocuments
+export const updateCustomerClassification = customerApi.updateCustomerClassification
 
 export default customerApi
