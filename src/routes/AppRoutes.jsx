@@ -35,9 +35,6 @@ import MainLayout from '../components/layout/MainLayout'
 import CustomerSearch from '../pages/reception/CustomerSearch'
 import CustomersKyc from '../pages/reception/CustomersKyc'
 import CustomerRegistration from '../pages/reception/CustomerRegistration'
-import CustomerProfile from '../pages/reception/CustomerProfile'
-import CustomerEdit from '../pages/reception/CustomerEdit'
-import DailyBadgeSessions from '../pages/reception/DailyBadgeSessions'
 
 // ============================================================
 // CASHIER / CASH & CHIPS
@@ -199,12 +196,12 @@ const AppRoutes = () => {
 
       <Route
         path="/reception/customer/:id"
-        element={protectedPage(<CustomerProfile />)}
+        element={<Navigate to="/customers" replace />}
       />
 
       <Route
         path="/reception/customer/:id/edit"
-        element={protectedPage(<CustomerEdit />)}
+        element={<Navigate to="/customers" replace />}
       />
 
       {/* =====================================================
@@ -228,7 +225,7 @@ const AppRoutes = () => {
 
 <Route
   path="/customers/:id"
-  element={protectedPage(<CustomerProfile />)}
+  element={<Navigate to="/customers" replace />}
 />
 
 <Route
