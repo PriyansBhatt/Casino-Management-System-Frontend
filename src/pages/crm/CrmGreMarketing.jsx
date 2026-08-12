@@ -1,394 +1,685 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
-const summaryCards = [
-  { label: 'Live Guests in Casino', value: '38', sub: '↑ 6 vs yesterday', icon: '👥', border: 'border-emerald-200', color: 'text-emerald-600' },
-  { label: 'VIP / VVIP Active', value: '12', sub: '↑ 2 vs yesterday', icon: '👑', border: 'border-purple-200', color: 'text-purple-600' },
-  { label: 'Pending Service Requests', value: '14', sub: '↑ 3 vs yesterday', icon: '📋', border: 'border-amber-200', color: 'text-amber-600' },
-  { label: 'Hotel Rooms Allocated', value: '26', sub: '↑ 4 vs yesterday', icon: '🏨', border: 'border-sky-200', color: 'text-sky-600' },
-  { label: 'Travel / Pickup Today', value: '8', sub: '↑ 1 vs yesterday', icon: '🚗', border: 'border-emerald-200', color: 'text-emerald-600' },
-  { label: 'Gifts Issued Today', value: '7', sub: '↓ 1 vs yesterday', icon: '🎁', border: 'border-pink-200', color: 'text-pink-600' },
-  { label: 'Total Service Cost Today', value: 'NPR 312,450', sub: '↑ 18% vs yesterday', icon: '🪙', border: 'border-yellow-300', color: 'text-yellow-700' },
-]
+const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
 
-const liveGuests = [
+const today = '2026-07-21'
+
+const initialGuests = [
   {
     badge: '112',
-    customer: 'Daniel Smith',
-    cid: 'CID11245678',
+    cid: 'CID-11245678',
+    name: 'Daniel Smith',
     category: 'VVIP',
     location: 'Baccarat Table 1',
     playStatus: 'Playing',
-    buyIn: 'NPR 120,000',
-    wallet: 'NPR 248,600',
-    lastService: '11:20 AM Beverage',
+    buyIn: 120000,
+    exposure: 248600,
+    lastService: '11:20 AM · Beverage',
     gre: 'Meera K.',
   },
   {
     badge: '087',
-    customer: 'Raj Sharma',
     cid: 'CID-000987',
+    name: 'Raj Sharma',
     category: 'VIP',
     location: 'Roulette Table 2',
     playStatus: 'Playing',
-    buyIn: 'NPR 65,000',
-    wallet: 'NPR 95,500',
-    lastService: '10:45 AM Dinner Booking',
+    buyIn: 65000,
+    exposure: 95500,
+    lastService: '10:45 AM · Dinner Booking',
     gre: 'Arjun P.',
   },
   {
     badge: '051',
-    customer: 'Priya Tamang',
     cid: 'CID-000051',
+    name: 'Priya Tamang',
     category: 'VIP',
     location: 'Slot Machine 7',
     playStatus: 'Break',
-    buyIn: 'NPR 25,000',
-    wallet: 'NPR 42,000',
-    lastService: '09:30 AM Airport Pickup',
+    buyIn: 25000,
+    exposure: 42000,
+    lastService: '09:30 AM · Airport Pickup',
     gre: 'Reshma T.',
   },
   {
     badge: '099',
-    customer: 'Ahmed Khan',
     cid: 'CID-000099',
-    category: 'Standard',
+    name: 'Ahmed Khan',
+    category: 'STANDARD',
     location: 'Lobby',
     playStatus: 'Waiting',
-    buyIn: 'NPR 10,000',
-    wallet: 'NPR 18,500',
+    buyIn: 10000,
+    exposure: 18500,
     lastService: '—',
     gre: 'Ravi S.',
   },
   {
     badge: '286',
-    customer: 'Sunil Verma',
     cid: 'CID-000286',
+    name: 'Sunil Verma',
     category: 'VIP',
     location: 'Pit Table 3',
     playStatus: 'Playing',
-    buyIn: 'NPR 50,000',
-    wallet: '-NPR 5,000',
-    lastService: '09:15 AM Checkout',
+    buyIn: 50000,
+    exposure: -5000,
+    lastService: '09:15 AM · Checkout',
     gre: 'Meera K.',
   },
 ]
 
-const pendingRequests = [
-  { id: 'SR-2026-0142', badge: '112', customer: 'Daniel Smith', type: 'Hotel Booking', cost: 'NPR 48,000', approval: 'Pending Approval', delivery: 'In Progress', gre: 'Meera K.' },
-  { id: 'SR-2026-0141', badge: '087', customer: 'Raj Sharma', type: 'Travel / Pickup', cost: 'NPR 6,500', approval: 'Approved', delivery: 'Scheduled', gre: 'Arjun P.' },
-  { id: 'SR-2026-0140', badge: '051', customer: 'Priya Tamang', type: 'Ticket Booking', cost: 'NPR 3,200', approval: 'Approved', delivery: 'Scheduled', gre: 'Reshma T.' },
-  { id: 'SR-2026-0139', badge: '099', customer: 'Ahmed Khan', type: 'Gift / Service', cost: 'NPR 800', approval: 'Pending Approval', delivery: 'Pending', gre: 'Ravi S.' },
-  { id: 'SR-2026-0138', badge: '286', customer: 'Sunil Verma', type: 'Travel / Drop', cost: 'NPR 4,100', approval: 'Approved', delivery: 'Completed', gre: 'Meera K.' },
-]
-
-const recentRecords = [
-  { title: 'Hotel Booking', desc: 'Daniel Smith (112) · Hotel 2 nights · Suite', status: 'Confirmed', time: '10:30 AM', icon: '🏨' },
-  { title: 'Vehicle Assignment', desc: 'Raj Sharma (087) · Airport Pickup', status: 'Scheduled', time: 'Yesterday', icon: '🚗' },
-  { title: 'Ticket Booking', desc: 'Priya Tamang (051) · Kathmandu → Dubai', status: 'Ticket Issued', time: 'Yesterday', icon: '✈️' },
-  { title: 'Gift / Service Issued', desc: 'Ahmed Khan (099) · Welcome Gift Package', status: 'Delivered', time: 'Yesterday', icon: '🎁' },
-  { title: 'Travel / Drop', desc: 'Sunil Verma (286) · Hotel Drop', status: 'Completed', time: '2 days ago', icon: '🚕' },
-]
-
-const hotelCards = [
-  { label: 'Total Bookings This Cycle', value: '128', sub: '↑ 18 vs last cycle', icon: '🏨', border: 'border-sky-200' },
-  { label: 'Pending Hotel Receipt Return', value: '29', sub: '22.66% of total', icon: '📄', border: 'border-amber-200' },
-  { label: 'Verified & Ready for Accounts', value: '52', sub: '40.63% of total', icon: '✅', border: 'border-emerald-200' },
-  { label: 'Sent to Accounts', value: '34', sub: '26.56% of total', icon: '🏦', border: 'border-purple-200' },
-  { label: 'Total Estimated Cost', value: 'NPR 5,248,000', sub: 'This cycle total', icon: '🪙', border: 'border-yellow-300' },
-]
-
-const hotelBookings = [
+const initialBookings = [
   {
-    bookingId: 'HB-2026-0516-001',
-    billNo: 'Bill HB-2026-0516-0987',
+    id: 'HB-2026-0721-001',
+    billNo: 'BILL-HB-2026-0721-001',
     badge: '087',
     cid: 'CID-000987',
     customer: 'Raj Sharma',
     category: 'VIP',
     hotel: 'Summit Grand Hotel',
-    room: 'Deluxe King',
-    rooms: '1',
-    checkIn: '2026-05-16',
-    checkOut: '2026-05-18',
-    nights: '2',
-    cost: 'NPR 48,000',
-    issuedBy: 'Daniel Smith',
-    approvedBy: 'Priya Tamang',
-    receivedBy: 'Amit Gurung',
-    receipt: 'Receipt Returned',
-    verification: 'Verified',
-    accounts: 'Ready for Accounts',
+    roomType: 'Deluxe King',
+    rooms: 1,
+    checkIn: '2026-07-21',
+    checkOut: '2026-07-23',
+    nights: 2,
+    estimatedCost: 48000,
+    receiptStatus: 'Receipt Returned',
+    verificationStatus: 'Verified',
+    accountsStatus: 'Ready for Accounts',
+    remarks: 'VIP guest · 2 nights stay with breakfast.',
   },
   {
-    bookingId: 'HB-2026-0516-002',
-    billNo: 'Bill HB-2026-0516-9988',
+    id: 'HB-2026-0721-002',
+    billNo: 'BILL-HB-2026-0721-002',
     badge: '112',
-    cid: 'CID-001112',
+    cid: 'CID-11245678',
     customer: 'Daniel Smith',
     category: 'VVIP',
     hotel: 'Hotel Everest Crown',
-    room: 'Executive Suite',
-    rooms: '2',
-    checkIn: '2026-05-16',
-    checkOut: '2026-05-19',
-    nights: '3',
-    cost: 'NPR 120,000',
-    issuedBy: 'Daniel Smith',
-    approvedBy: 'Priya Tamang',
-    receivedBy: 'Suresh Shrestha',
-    receipt: 'Pending Return',
-    verification: 'Pending Verification',
-    accounts: 'Hold',
+    roomType: 'Executive Suite',
+    rooms: 2,
+    checkIn: '2026-07-22',
+    checkOut: '2026-07-25',
+    nights: 3,
+    estimatedCost: 120000,
+    receiptStatus: 'Pending Return',
+    verificationStatus: 'Not Verified',
+    accountsStatus: 'Not Ready',
+    remarks: 'Airport pickup included.',
+  },
+]
+
+const initialRequests = [
+  {
+    id: 'SRV-00048',
+    serviceType: 'Vehicle Assignment',
+    badge: '087',
+    cid: 'CID-000987',
+    customer: 'Raj Sharma',
+    category: 'VIP',
+    details: 'Airport Pickup · 22 Jul, 10:00 AM',
+    estimatedCost: 12000,
+    status: 'In Progress',
+    approval: 'Approved',
+    delivery: 'Scheduled',
+    assignedGre: 'Karan Lama',
+    location: 'Gaming Floor · Table 1',
+    notes: 'Pickup: Tribhuvan Airport → Royal Summit Casino',
   },
   {
-    bookingId: 'HB-2026-0515-003',
-    billNo: 'Bill HB-2026-0515-9962',
+    id: 'SRV-00047',
+    serviceType: 'Gift / Service',
+    badge: '112',
+    cid: 'CID-11245678',
+    customer: 'Daniel Smith',
+    category: 'VVIP',
+    details: 'Welcome Gift Pack',
+    estimatedCost: 8000,
+    status: 'Completed',
+    approval: 'Approved',
+    delivery: 'Delivered',
+    assignedGre: 'Meera K.',
+    location: 'Baccarat Table 1',
+    notes: 'Premium welcome gift.',
+  },
+  {
+    id: 'SRV-00046',
+    serviceType: 'Food (F&B)',
     badge: '051',
     cid: 'CID-000051',
     customer: 'Priya Tamang',
     category: 'VIP',
-    hotel: 'City Palace Hotel',
-    room: 'Deluxe Twin',
-    rooms: '1',
-    checkIn: '2026-05-15',
-    checkOut: '2026-05-17',
-    nights: '2',
-    cost: 'NPR 36,000',
-    issuedBy: 'Daniel Smith',
-    approvedBy: 'Priya Tamang',
-    receivedBy: 'Deepak Rai',
-    receipt: 'Compiling Bill',
-    verification: 'Verified',
-    accounts: 'Sent to Accounts',
-  },
-]
-
-const serviceSummaryCards = [
-  {
-    label: 'Total Requests This Month',
-    value: '48',
-    sub: 'All services',
-    icon: '🚗',
-    border: 'border-yellow-300',
-  },
-  {
-    label: 'Pending Approval',
-    value: '7',
-    sub: 'Awaiting approval',
-    icon: '🎁',
-    border: 'border-red-200',
-  },
-  {
-    label: 'In Progress',
-    value: '12',
-    sub: 'Service in progress',
-    icon: '🛎️',
-    border: 'border-amber-200',
-  },
-  {
-    label: 'Completed Today',
-    value: '15',
-    sub: 'Successfully completed',
-    icon: '✅',
-    border: 'border-emerald-200',
-  },
-]
-
-const serviceRequests = [
-  {
-    id: 'SRV-00048',
-    type: 'Vehicle Assignment',
-    icon: '🚗',
-    customer: 'Raj Sharma',
-    cid: 'CID-100387',
-    badge: '087',
-    category: 'VIP',
-    details: 'Airport Pickup · 19 May, 10:00 AM',
-    cost: 'NPR 12,000',
-    status: 'In Progress',
-    approval: 'Approved',
-    delivery: 'Scheduled',
-    gre: 'Karan Lama',
-    pickup: 'Tribhuvan Airport',
-    drop: 'Royal Summit Casino',
-    vehicle: 'B AB 1234',
-    driver: 'Mahesh Thapa',
-    contact: '9841234567',
-    remarks: 'VIP Arrival · Flight AI 215',
-  },
-  {
-    id: 'SRV-00047',
-    type: 'Gift / Service',
-    icon: '🎁',
-    customer: 'Daniel Smith',
-    cid: 'CID-100112',
-    badge: '112',
-    category: 'VVIP',
-    details: 'Welcome Gift Pack',
-    cost: 'NPR 8,000',
-    status: 'Completed',
-    approval: 'Approved',
-    delivery: 'Delivered',
-    gre: 'Meera K.',
-    pickup: 'Inventory Store',
-    drop: 'Customer Lounge',
-    vehicle: '—',
-    driver: 'GRE Team',
-    contact: '—',
-    remarks: 'Welcome gift package issued.',
-  },
-  {
-    id: 'SRV-00046',
-    type: 'Food (F&B)',
-    icon: '🍽️',
-    customer: 'Priya Tamang',
-    cid: 'CID-100051',
-    badge: '051',
-    category: 'VIP',
     details: 'Fruit Platter & Juice · Table 3',
-    cost: 'NPR 5,500',
+    estimatedCost: 5500,
     status: 'Completed',
     approval: 'Not Required',
     delivery: 'Delivered',
-    gre: 'Reshma T.',
-    pickup: 'Kitchen',
-    drop: 'Baccarat Table 3',
-    vehicle: '—',
-    driver: 'F&B Staff',
-    contact: '—',
-    remarks: 'Delivered to gaming floor.',
+    assignedGre: 'Reshma T.',
+    location: 'Slot Machine 7',
+    notes: 'Delivered to guest.',
   },
   {
     id: 'SRV-00045',
-    type: 'Vehicle Assignment',
-    icon: '🚗',
-    customer: 'Amit Verma',
-    cid: 'CID-100044',
+    serviceType: 'Vehicle Assignment',
     badge: '044',
+    cid: 'CID-000044',
+    customer: 'Amit Verma',
     category: 'VVIP',
-    details: 'Drop to Airport · 19 May, 08:00 PM',
-    cost: 'NPR 15,000',
+    details: 'Airport Drop · 22 Jul, 08:00 PM',
+    estimatedCost: 15000,
     status: 'Pending',
     approval: 'Pending',
     delivery: '—',
-    gre: 'Arjun P.',
-    pickup: 'Royal Summit Casino',
-    drop: 'Tribhuvan Airport',
-    vehicle: 'Pending',
-    driver: 'Pending',
-    contact: 'Pending',
-    remarks: 'Awaiting director approval.',
+    assignedGre: 'Ravi S.',
+    location: 'Lobby',
+    notes: 'Awaiting vehicle confirmation.',
   },
   {
     id: 'SRV-00044',
-    type: 'Gift / Service',
-    icon: '🎁',
-    customer: 'Pawan Gurung',
-    cid: 'CID-100066',
+    serviceType: 'Gift / Service',
     badge: '066',
+    cid: 'CID-000066',
+    customer: 'Pawan Gurung',
     category: 'VIP',
     details: 'Cash Coupon NPR 5,000',
-    cost: 'NPR 5,000',
+    estimatedCost: 5000,
     status: 'Pending Approval',
     approval: 'Pending',
     delivery: '—',
-    gre: 'Ravi S.',
-    pickup: 'CRM Desk',
-    drop: 'Customer',
-    vehicle: '—',
-    driver: 'GRE Team',
-    contact: '—',
-    remarks: 'Coupon approval required.',
+    assignedGre: 'Arjun P.',
+    location: 'Pit Table 2',
+    notes: 'Director approval required.',
   },
   {
     id: 'SRV-00043',
-    type: 'Food (F&B)',
-    icon: '🍽️',
-    customer: 'Deepak Joshi',
-    cid: 'CID-100073',
+    serviceType: 'Food (F&B)',
     badge: '073',
+    cid: 'CID-000073',
+    customer: 'Deepak Joshi',
     category: 'VIP',
     details: 'Chicken Sandwich + Cold Drink',
-    cost: 'NPR 3,500',
+    estimatedCost: 3500,
     status: 'In Progress',
     approval: 'Approved',
     delivery: 'Preparing',
-    gre: 'Karan Lama',
-    pickup: 'Kitchen',
-    drop: 'Slot Machine 3',
-    vehicle: '—',
-    driver: 'F&B Staff',
-    contact: '—',
-    remarks: 'Send to machine area.',
+    assignedGre: 'Meera K.',
+    location: 'Slot Machine 5',
+    notes: 'Kitchen preparing order.',
   },
   {
     id: 'SRV-00042',
-    type: 'Vehicle Assignment',
-    icon: '🚗',
-    customer: 'Suresh Adhikari',
-    cid: 'CID-100091',
-    badge: '091',
-    category: 'VVIP',
-    details: 'Local City Tour · 20 May, 02:00 PM',
-    cost: 'NPR 18,000',
-    status: 'Scheduled',
+    serviceType: 'Ticket Booking',
+    badge: '051',
+    cid: 'CID-000051',
+    customer: 'Priya Tamang',
+    category: 'VIP',
+    details: 'Kathmandu → Dubai',
+    estimatedCost: 52000,
+    status: 'Completed',
     approval: 'Approved',
-    delivery: 'Scheduled',
-    gre: 'Meera K.',
-    pickup: 'Royal Summit Casino',
-    drop: 'Local City Tour',
-    vehicle: 'BA 22 PA 5544',
-    driver: 'Nabin Rai',
-    contact: '9800001111',
-    remarks: 'Premium vehicle required.',
+    delivery: 'Ticket Issued',
+    assignedGre: 'Reshma T.',
+    location: 'CRM Desk',
+    notes: 'E-ticket issued.',
   },
 ]
 
-const inputClass =
-  'h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20'
-
-const labelClass =
-  'mb-2 block text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500'
-
-const badgeClass = {
-  VIP: 'border-yellow-300 bg-yellow-50 text-yellow-700',
-  VVIP: 'border-purple-200 bg-purple-50 text-purple-700',
-  Standard: 'border-sky-200 bg-sky-50 text-sky-700',
-  Playing: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  Break: 'border-sky-200 bg-sky-50 text-sky-700',
-  Waiting: 'border-yellow-300 bg-yellow-50 text-yellow-700',
-  Approved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  'Pending Approval': 'border-yellow-300 bg-yellow-50 text-yellow-700',
-  Pending: 'border-yellow-300 bg-yellow-50 text-yellow-700',
-  'In Progress': 'border-sky-200 bg-sky-50 text-sky-700',
-  Scheduled: 'border-sky-200 bg-sky-50 text-sky-700',
-  Completed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  Confirmed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  Delivered: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  Preparing: 'border-amber-200 bg-amber-50 text-amber-700',
-  'Not Required': 'border-slate-200 bg-slate-50 text-slate-700',
-  'Ticket Issued': 'border-purple-200 bg-purple-50 text-purple-700',
-  'Receipt Returned': 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  Verified: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  'Ready for Accounts': 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  'Pending Return': 'border-yellow-300 bg-yellow-50 text-yellow-700',
-  'Pending Verification': 'border-yellow-300 bg-yellow-50 text-yellow-700',
-  Hold: 'border-red-200 bg-red-50 text-red-700',
-  'Compiling Bill': 'border-sky-200 bg-sky-50 text-sky-700',
-  'Sent to Accounts': 'border-purple-200 bg-purple-50 text-purple-700',
-  '—': 'border-slate-200 bg-slate-50 text-slate-500',
+const emptyBooking = {
+  cid: '',
+  badge: '',
+  customer: '',
+  category: 'VIP',
+  hotel: '',
+  roomType: '',
+  rooms: '1',
+  checkIn: today,
+  checkOut: '',
+  estimatedCost: '',
+  remarks: '',
 }
 
-const StatusBadge = ({ children }) => (
-  <span className={`rounded-lg border px-3 py-1 text-xs font-bold uppercase ${badgeClass[children] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-    {children}
-  </span>
-)
+const emptyService = {
+  serviceType: 'Vehicle Assignment',
+  cid: '',
+  badge: '',
+  customer: '',
+  category: 'VIP',
+  details: '',
+  estimatedCost: '',
+  assignedGre: '',
+  approval: 'Pending',
+  notes: '',
+}
 
 const CrmGreMarketing = () => {
   const [activeTab, setActiveTab] = useState('Dashboard')
-  const [selectedGuest, setSelectedGuest] = useState(liveGuests[0])
-  const [showBookingModal, setShowBookingModal] = useState(false)
+  const [guests] = useState(initialGuests)
+  const [bookings, setBookings] = useState(initialBookings)
+  const [requests, setRequests] = useState(initialRequests)
+  const [selectedGuest, setSelectedGuest] = useState(initialGuests[0])
+  const [selectedBooking, setSelectedBooking] = useState(null)
+  const [selectedRequest, setSelectedRequest] = useState(initialRequests[0])
+
+  const [guestSearch, setGuestSearch] = useState('')
+  const [bookingSearch, setBookingSearch] = useState('')
+  const [hotelFilter, setHotelFilter] = useState('All Hotels')
+  const [bookingStatusFilter, setBookingStatusFilter] = useState('All Statuses')
+
+  const [serviceSearch, setServiceSearch] = useState('')
+  const [serviceTypeFilter, setServiceTypeFilter] = useState('All Service Types')
+  const [serviceStatusFilter, setServiceStatusFilter] = useState('All Statuses')
+  const [approvalFilter, setApprovalFilter] = useState('All Approval Statuses')
+
+  const [modal, setModal] = useState(null)
+  const [bookingForm, setBookingForm] = useState(emptyBooking)
+  const [serviceForm, setServiceForm] = useState(emptyService)
+  const [errors, setErrors] = useState({})
+  const [toast, setToast] = useState(null)
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+    window.setTimeout(() => setToast(null), 3000)
+  }
+
+  const filteredGuests = useMemo(() => {
+    const query = guestSearch.trim().toLowerCase()
+    return guests.filter((guest) => {
+      return (
+        !query ||
+        guest.name.toLowerCase().includes(query) ||
+        guest.cid.toLowerCase().includes(query) ||
+        guest.badge.includes(query) ||
+        guest.location.toLowerCase().includes(query)
+      )
+    })
+  }, [guestSearch, guests])
+
+  const filteredBookings = useMemo(() => {
+    const query = bookingSearch.trim().toLowerCase()
+    return bookings.filter((booking) => {
+      const searchMatch =
+        !query ||
+        booking.customer.toLowerCase().includes(query) ||
+        booking.cid.toLowerCase().includes(query) ||
+        booking.badge.includes(query) ||
+        booking.id.toLowerCase().includes(query) ||
+        booking.billNo.toLowerCase().includes(query)
+
+      const hotelMatch =
+        hotelFilter === 'All Hotels' || booking.hotel === hotelFilter
+
+      const statusMatch =
+        bookingStatusFilter === 'All Statuses' ||
+        booking.verificationStatus === bookingStatusFilter ||
+        booking.accountsStatus === bookingStatusFilter ||
+        booking.receiptStatus === bookingStatusFilter
+
+      return searchMatch && hotelMatch && statusMatch
+    })
+  }, [bookingSearch, bookingStatusFilter, bookings, hotelFilter])
+
+  const filteredRequests = useMemo(() => {
+    const query = serviceSearch.trim().toLowerCase()
+
+    return requests.filter((request) => {
+      const searchMatch =
+        !query ||
+        request.customer.toLowerCase().includes(query) ||
+        request.cid.toLowerCase().includes(query) ||
+        request.badge.includes(query) ||
+        request.id.toLowerCase().includes(query) ||
+        request.details.toLowerCase().includes(query)
+
+      const typeMatch =
+        serviceTypeFilter === 'All Service Types' ||
+        request.serviceType === serviceTypeFilter
+
+      const statusMatch =
+        serviceStatusFilter === 'All Statuses' ||
+        request.status === serviceStatusFilter
+
+      const approvalMatch =
+        approvalFilter === 'All Approval Statuses' ||
+        request.approval === approvalFilter
+
+      return searchMatch && typeMatch && statusMatch && approvalMatch
+    })
+  }, [
+    approvalFilter,
+    requests,
+    serviceSearch,
+    serviceStatusFilter,
+    serviceTypeFilter,
+  ])
+
+  const dashboardStats = useMemo(() => {
+    return {
+      liveGuests: guests.length,
+      vip: guests.filter((guest) => ['VIP', 'VVIP'].includes(guest.category))
+        .length,
+      pending: requests.filter((request) =>
+        ['Pending', 'Pending Approval'].includes(request.status),
+      ).length,
+      hotelRooms: bookings.reduce(
+        (total, booking) => total + Number(booking.rooms || 0),
+        0,
+      ),
+      vehicleToday: requests.filter(
+        (request) => request.serviceType === 'Vehicle Assignment',
+      ).length,
+      giftsToday: requests.filter(
+        (request) => request.serviceType === 'Gift / Service',
+      ).length,
+      totalCost:
+        bookings.reduce(
+          (total, booking) => total + Number(booking.estimatedCost || 0),
+          0,
+        ) +
+        requests.reduce(
+          (total, request) => total + Number(request.estimatedCost || 0),
+          0,
+        ),
+    }
+  }, [bookings, guests, requests])
+
+  const hotelStats = useMemo(() => {
+    return {
+      total: bookings.length,
+      pendingReceipt: bookings.filter(
+        (booking) => booking.receiptStatus === 'Pending Return',
+      ).length,
+      verified: bookings.filter(
+        (booking) => booking.verificationStatus === 'Verified',
+      ).length,
+      accounts: bookings.filter(
+        (booking) => booking.accountsStatus === 'Sent to Accounts',
+      ).length,
+      estimatedCost: bookings.reduce(
+        (total, booking) => total + Number(booking.estimatedCost || 0),
+        0,
+      ),
+    }
+  }, [bookings])
+
+  const serviceStats = useMemo(() => {
+    return {
+      total: requests.length,
+      pending: requests.filter((request) => request.approval === 'Pending')
+        .length,
+      inProgress: requests.filter(
+        (request) => request.status === 'In Progress',
+      ).length,
+      completed: requests.filter(
+        (request) => request.status === 'Completed',
+      ).length,
+    }
+  }, [requests])
+
+  const exportCsv = (filename, header, rows) => {
+    const csv = [header, ...rows]
+      .map((row) =>
+        row
+          .map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`)
+          .join(','),
+      )
+      .join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    anchor.click()
+    URL.revokeObjectURL(url)
+    showToast(`${filename} exported.`)
+  }
+
+  const exportGuests = () =>
+    exportCsv(
+      'crm-live-guests.csv',
+      [
+        'Badge',
+        'CID',
+        'Customer',
+        'Category',
+        'Location',
+        'Play Status',
+        'Buy-In',
+        'Exposure',
+        'Last Service',
+        'Assigned GRE',
+      ],
+      filteredGuests.map((guest) => [
+        guest.badge,
+        guest.cid,
+        guest.name,
+        guest.category,
+        guest.location,
+        guest.playStatus,
+        guest.buyIn,
+        guest.exposure,
+        guest.lastService,
+        guest.gre,
+      ]),
+    )
+
+  const exportBookings = () =>
+    exportCsv(
+      'crm-hotel-bookings.csv',
+      [
+        'Booking ID',
+        'Bill No',
+        'Badge',
+        'CID',
+        'Customer',
+        'Category',
+        'Hotel',
+        'Room Type',
+        'Rooms',
+        'Check-In',
+        'Check-Out',
+        'Nights',
+        'Estimated Cost',
+        'Receipt Status',
+        'Verification',
+        'Accounts',
+      ],
+      filteredBookings.map((booking) => [
+        booking.id,
+        booking.billNo,
+        booking.badge,
+        booking.cid,
+        booking.customer,
+        booking.category,
+        booking.hotel,
+        booking.roomType,
+        booking.rooms,
+        booking.checkIn,
+        booking.checkOut,
+        booking.nights,
+        booking.estimatedCost,
+        booking.receiptStatus,
+        booking.verificationStatus,
+        booking.accountsStatus,
+      ]),
+    )
+
+  const validateBooking = () => {
+    const nextErrors = {}
+    if (!bookingForm.customer.trim()) nextErrors.customer = 'Customer is required.'
+    if (!bookingForm.cid.trim()) nextErrors.cid = 'CID is required.'
+    if (!bookingForm.badge.trim()) nextErrors.badge = 'Badge is required.'
+    if (!bookingForm.hotel) nextErrors.hotel = 'Hotel is required.'
+    if (!bookingForm.roomType) nextErrors.roomType = 'Room type is required.'
+    if (!bookingForm.checkIn) nextErrors.checkIn = 'Check-in date is required.'
+    if (!bookingForm.checkOut) nextErrors.checkOut = 'Check-out date is required.'
+    if (!bookingForm.estimatedCost || Number(bookingForm.estimatedCost) <= 0) {
+      nextErrors.estimatedCost = 'Estimated cost must be greater than zero.'
+    }
+
+    if (
+      bookingForm.checkIn &&
+      bookingForm.checkOut &&
+      bookingForm.checkOut <= bookingForm.checkIn
+    ) {
+      nextErrors.checkOut = 'Check-out must be after check-in.'
+    }
+
+    setErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
+  }
+
+  const saveBooking = (mode) => {
+    if (!validateBooking()) return
+
+    const checkIn = new Date(bookingForm.checkIn)
+    const checkOut = new Date(bookingForm.checkOut)
+    const nights = Math.max(
+      1,
+      Math.round((checkOut - checkIn) / (1000 * 60 * 60 * 24)),
+    )
+
+    const nextNumber = bookings.length + 1
+    const id = `HB-2026-0721-${String(nextNumber).padStart(3, '0')}`
+    const billNo = `BILL-${id}`
+
+    const record = {
+      id,
+      billNo,
+      badge: bookingForm.badge.trim(),
+      cid: bookingForm.cid.trim(),
+      customer: bookingForm.customer.trim(),
+      category: bookingForm.category,
+      hotel: bookingForm.hotel,
+      roomType: bookingForm.roomType,
+      rooms: Number(bookingForm.rooms),
+      checkIn: bookingForm.checkIn,
+      checkOut: bookingForm.checkOut,
+      nights,
+      estimatedCost: Number(bookingForm.estimatedCost),
+      receiptStatus: mode === 'receipt' ? 'Receipt Issued' : 'Pending Issue',
+      verificationStatus: 'Not Verified',
+      accountsStatus: 'Not Ready',
+      remarks: bookingForm.remarks.trim(),
+    }
+
+    setBookings((current) => [record, ...current])
+    setSelectedBooking(record)
+    setBookingForm(emptyBooking)
+    setErrors({})
+    setModal(null)
+    setActiveTab('Hotel Booking')
+    showToast(
+      mode === 'receipt'
+        ? `Booking ${id} saved and receipt issued.`
+        : `Booking ${id} saved successfully.`,
+    )
+  }
+
+  const updateBookingStatus = (bookingId, changes, message) => {
+    setBookings((current) =>
+      current.map((booking) =>
+        booking.id === bookingId ? { ...booking, ...changes } : booking,
+      ),
+    )
+
+    setSelectedBooking((current) =>
+      current?.id === bookingId ? { ...current, ...changes } : current,
+    )
+
+    showToast(message)
+  }
+
+  const validateService = () => {
+    const nextErrors = {}
+    if (!serviceForm.customer.trim()) nextErrors.customer = 'Customer is required.'
+    if (!serviceForm.cid.trim()) nextErrors.cid = 'CID is required.'
+    if (!serviceForm.badge.trim()) nextErrors.badge = 'Badge is required.'
+    if (!serviceForm.details.trim()) nextErrors.details = 'Service details are required.'
+    if (!serviceForm.assignedGre.trim()) nextErrors.assignedGre = 'Assigned GRE is required.'
+    if (!serviceForm.estimatedCost || Number(serviceForm.estimatedCost) < 0) {
+      nextErrors.estimatedCost = 'Enter a valid estimated cost.'
+    }
+    setErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
+  }
+
+  const saveServiceRequest = () => {
+    if (!validateService()) return
+
+    const id = `SRV-${String(49 + requests.length).padStart(5, '0')}`
+    const record = {
+      id,
+      serviceType: serviceForm.serviceType,
+      badge: serviceForm.badge.trim(),
+      cid: serviceForm.cid.trim(),
+      customer: serviceForm.customer.trim(),
+      category: serviceForm.category,
+      details: serviceForm.details.trim(),
+      estimatedCost: Number(serviceForm.estimatedCost),
+      status: serviceForm.approval === 'Approved' ? 'In Progress' : 'Pending Approval',
+      approval: serviceForm.approval,
+      delivery: '—',
+      assignedGre: serviceForm.assignedGre.trim(),
+      location: 'CRM / GRE Desk',
+      notes: serviceForm.notes.trim(),
+    }
+
+    setRequests((current) => [record, ...current])
+    setSelectedRequest(record)
+    setModal(null)
+    setServiceForm(emptyService)
+    setErrors({})
+    setActiveTab(
+      record.serviceType === 'Vehicle Assignment'
+        ? 'Vehicle Assignment'
+        : record.serviceType === 'Gift / Service'
+          ? 'Gifts & Services'
+          : record.serviceType === 'Food (F&B)'
+            ? 'Food (F&B) Requests'
+            : 'Ticket Booking',
+    )
+    showToast(`${record.id} created successfully.`)
+  }
+
+  const updateRequest = (requestId, changes, message) => {
+    setRequests((current) =>
+      current.map((request) =>
+        request.id === requestId ? { ...request, ...changes } : request,
+      ),
+    )
+
+    setSelectedRequest((current) =>
+      current?.id === requestId ? { ...current, ...changes } : current,
+    )
+
+    showToast(message)
+  }
+
+  const openBookingForGuest = (guest = selectedGuest) => {
+    setBookingForm({
+      ...emptyBooking,
+      cid: guest?.cid || '',
+      badge: guest?.badge || '',
+      customer: guest?.name || '',
+      category: guest?.category || 'VIP',
+    })
+    setErrors({})
+    setModal('booking')
+  }
+
+  const openServiceForGuest = (serviceType, guest = selectedGuest) => {
+    setServiceForm({
+      ...emptyService,
+      serviceType,
+      cid: guest?.cid || '',
+      badge: guest?.badge || '',
+      customer: guest?.name || '',
+      category: guest?.category || 'VIP',
+      assignedGre: guest?.gre || '',
+    })
+    setErrors({})
+    setModal('service')
+  }
 
   const tabs = [
     'Dashboard',
@@ -401,1075 +692,754 @@ const CrmGreMarketing = () => {
   ]
 
   return (
-    <div className="space-y-6 text-slate-900">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-5 text-slate-900">
+      <section className="flex flex-col gap-4 border-b border-slate-200 pb-5 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <h1 className="font-serif text-3xl font-bold tracking-tight text-slate-950">
-            <span className="mr-2 text-yellow-500">◆</span>
+          <h1 className="font-serif text-3xl font-black tracking-tight text-slate-950">
+            <span className="mr-2 text-amber-400">◆</span>
             CRM / GRE / Marketing
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            Live guest service, hotel, travel, gifts, tickets, food requests, and customer retention management.
+            Guest services, hotel bookings, transport, gifts, tickets, food requests and service history.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => setShowBookingModal(true)}
-            className="rounded-lg bg-yellow-400 px-4 py-2.5 text-sm font-extrabold text-slate-950 shadow-sm hover:bg-yellow-300"
-          >
-            + New Hotel Booking
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('Vehicle Assignment')}
-            className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-bold text-sky-700 hover:bg-sky-100"
-          >
-            🚗 Assign Vehicle
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('Ticket Booking')}
-            className="rounded-lg border border-purple-200 bg-purple-50 px-4 py-2.5 text-sm font-bold text-purple-700 hover:bg-purple-100"
-          >
-            🎫 Book Ticket
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('Gifts & Services')}
-            className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-100"
-          >
-            🎁 Issue Gift / Service
-          </button>
+        <div className="flex flex-wrap gap-2">
+          <ActionButton label="+ New Hotel Booking" onClick={() => openBookingForGuest()} primary />
+          <ActionButton label="🚗 Assign Vehicle" onClick={() => openServiceForGuest('Vehicle Assignment')} />
+          <ActionButton label="🎫 Book Ticket" onClick={() => openServiceForGuest('Ticket Booking')} />
+          <ActionButton label="🎁 Issue Gift / Service" onClick={() => openServiceForGuest('Gift / Service')} />
         </div>
-      </div>
+      </section>
 
-      <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+      <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         {tabs.map((tab) => (
           <button
-            key={tab}
             type="button"
+            key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-extrabold ${
+            className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-black transition ${
               activeTab === tab
-                ? 'bg-yellow-400 text-slate-950'
-                : 'text-slate-500 hover:bg-slate-50'
+                ? 'bg-amber-400 text-slate-950'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             {tab}
           </button>
         ))}
-      </div>
+      </nav>
 
       {activeTab === 'Dashboard' && (
         <DashboardView
+          stats={dashboardStats}
+          guests={filteredGuests}
+          guestSearch={guestSearch}
+          setGuestSearch={setGuestSearch}
           selectedGuest={selectedGuest}
           setSelectedGuest={setSelectedGuest}
-          setShowBookingModal={setShowBookingModal}
+          exportGuests={exportGuests}
+          openBookingForGuest={openBookingForGuest}
+          openServiceForGuest={openServiceForGuest}
+          requests={requests}
+          setSelectedRequest={setSelectedRequest}
           setActiveTab={setActiveTab}
         />
       )}
 
       {activeTab === 'Hotel Booking' && (
-        <HotelBookingRecords setShowBookingModal={setShowBookingModal} />
+        <HotelBookingView
+          stats={hotelStats}
+          bookings={filteredBookings}
+          search={bookingSearch}
+          setSearch={setBookingSearch}
+          hotelFilter={hotelFilter}
+          setHotelFilter={setHotelFilter}
+          statusFilter={bookingStatusFilter}
+          setStatusFilter={setBookingStatusFilter}
+          openBooking={() => openBookingForGuest()}
+          exportBookings={exportBookings}
+          selectedBooking={selectedBooking}
+          setSelectedBooking={setSelectedBooking}
+          updateBookingStatus={updateBookingStatus}
+        />
       )}
 
-      {['Vehicle Assignment', 'Gifts & Services', 'Food (F&B) Requests'].includes(activeTab) && (
-        <ServiceRequestsView activeTab={activeTab} />
+      {[
+        'Vehicle Assignment',
+        'Gifts & Services',
+        'Food (F&B) Requests',
+        'Ticket Booking',
+        'Service Records',
+      ].includes(activeTab) && (
+        <ServiceRequestsView
+          activeTab={activeTab}
+          stats={serviceStats}
+          requests={filteredRequests}
+          search={serviceSearch}
+          setSearch={setServiceSearch}
+          typeFilter={serviceTypeFilter}
+          setTypeFilter={setServiceTypeFilter}
+          statusFilter={serviceStatusFilter}
+          setStatusFilter={setServiceStatusFilter}
+          approvalFilter={approvalFilter}
+          setApprovalFilter={setApprovalFilter}
+          selectedRequest={selectedRequest}
+          setSelectedRequest={setSelectedRequest}
+          openRequest={() =>
+            openServiceForGuest(
+              activeTab === 'Gifts & Services'
+                ? 'Gift / Service'
+                : activeTab === 'Food (F&B) Requests'
+                  ? 'Food (F&B)'
+                  : activeTab === 'Ticket Booking'
+                    ? 'Ticket Booking'
+                    : 'Vehicle Assignment',
+            )
+          }
+          updateRequest={updateRequest}
+        />
       )}
 
-      {activeTab !== 'Dashboard' &&
-        activeTab !== 'Hotel Booking' &&
-        !['Vehicle Assignment', 'Gifts & Services', 'Food (F&B) Requests'].includes(activeTab) && (
-          <ComingSoonPanel title={activeTab} />
-        )}
+      {modal === 'booking' && (
+        <ModalOverlay onClose={() => setModal(null)}>
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <ModalHeader
+              title="New Hotel Booking"
+              description="Create a hotel booking, issue the guest receipt and track hotel bill verification."
+              onClose={() => setModal(null)}
+            />
 
-      {showBookingModal && (
-        <NewHotelBookingModal onClose={() => setShowBookingModal(false)} />
+            <div className="max-h-[76vh] overflow-y-auto p-5">
+              <div className="grid gap-5 lg:grid-cols-[1fr_1fr_320px]">
+                <FormSection title="1. Customer & Booking">
+                  <InputField label="CID" value={bookingForm.cid} error={errors.cid} onChange={(value) => setBookingForm((current) => ({ ...current, cid: value }))} />
+                  <InputField label="Badge" value={bookingForm.badge} error={errors.badge} onChange={(value) => setBookingForm((current) => ({ ...current, badge: value }))} />
+                  <InputField label="Customer Name" value={bookingForm.customer} error={errors.customer} onChange={(value) => setBookingForm((current) => ({ ...current, customer: value }))} />
+                  <SelectField label="Category" value={bookingForm.category} options={['VIP', 'VVIP', 'STANDARD']} onChange={(value) => setBookingForm((current) => ({ ...current, category: value }))} />
+                  <SelectField label="Hotel" value={bookingForm.hotel} error={errors.hotel} options={['Summit Grand Hotel', 'Hotel Everest Crown', 'Hyatt Kathmandu', 'Soaltee Hotel']} onChange={(value) => setBookingForm((current) => ({ ...current, hotel: value }))} />
+                  <SelectField label="Room Type" value={bookingForm.roomType} error={errors.roomType} options={['Deluxe King', 'Executive Suite', 'Twin Room', 'Presidential Suite']} onChange={(value) => setBookingForm((current) => ({ ...current, roomType: value }))} />
+                </FormSection>
+
+                <FormSection title="2. Stay & Cost">
+                  <SelectField label="Room Quantity" value={bookingForm.rooms} options={['1', '2', '3', '4']} onChange={(value) => setBookingForm((current) => ({ ...current, rooms: value }))} />
+                  <InputField label="Check-In Date" type="date" value={bookingForm.checkIn} error={errors.checkIn} onChange={(value) => setBookingForm((current) => ({ ...current, checkIn: value }))} />
+                  <InputField label="Check-Out Date" type="date" value={bookingForm.checkOut} error={errors.checkOut} onChange={(value) => setBookingForm((current) => ({ ...current, checkOut: value }))} />
+                  <InputField label="Estimated Cost" type="number" value={bookingForm.estimatedCost} error={errors.estimatedCost} onChange={(value) => setBookingForm((current) => ({ ...current, estimatedCost: value }))} />
+                  <TextAreaField label="Remarks" value={bookingForm.remarks} onChange={(value) => setBookingForm((current) => ({ ...current, remarks: value }))} />
+                </FormSection>
+
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">Booking Summary</h3>
+                    <div className="mt-4 space-y-3">
+                      <DetailLine label="Customer" value={bookingForm.customer || '—'} />
+                      <DetailLine label="Category" value={bookingForm.category} />
+                      <DetailLine label="Hotel" value={bookingForm.hotel || '—'} />
+                      <DetailLine label="Room Type" value={bookingForm.roomType || '—'} />
+                      <DetailLine label="Rooms" value={bookingForm.rooms} />
+                      <DetailLine label="Estimated Cost" value={money(bookingForm.estimatedCost)} />
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+                    <p className="font-black">Operational workflow</p>
+                    <p className="mt-2 leading-6">
+                      Issue receipt → guest submits it to hotel → hotel returns bill and original receipt → GRE verifies → verified bill is sent to Accounts.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4">
+              <ActionButton label="Cancel" onClick={() => setModal(null)} />
+              <ActionButton label="Save Booking" onClick={() => saveBooking('save')} />
+              <ActionButton label="Save & Issue Receipt" onClick={() => saveBooking('receipt')} primary />
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
+      {modal === 'service' && (
+        <ModalOverlay onClose={() => setModal(null)}>
+          <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <ModalHeader
+              title="New Service Request"
+              description="Create a vehicle, gift, food or ticket request for the selected guest."
+              onClose={() => setModal(null)}
+            />
+
+            <div className="max-h-[76vh] overflow-y-auto p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField
+                  label="Service Type"
+                  value={serviceForm.serviceType}
+                  options={['Vehicle Assignment', 'Gift / Service', 'Food (F&B)', 'Ticket Booking']}
+                  onChange={(value) => setServiceForm((current) => ({ ...current, serviceType: value }))}
+                />
+                <SelectField
+                  label="Category"
+                  value={serviceForm.category}
+                  options={['VIP', 'VVIP', 'STANDARD']}
+                  onChange={(value) => setServiceForm((current) => ({ ...current, category: value }))}
+                />
+                <InputField label="CID" value={serviceForm.cid} error={errors.cid} onChange={(value) => setServiceForm((current) => ({ ...current, cid: value }))} />
+                <InputField label="Badge" value={serviceForm.badge} error={errors.badge} onChange={(value) => setServiceForm((current) => ({ ...current, badge: value }))} />
+                <InputField label="Customer Name" value={serviceForm.customer} error={errors.customer} onChange={(value) => setServiceForm((current) => ({ ...current, customer: value }))} />
+                <InputField label="Assigned GRE" value={serviceForm.assignedGre} error={errors.assignedGre} onChange={(value) => setServiceForm((current) => ({ ...current, assignedGre: value }))} />
+                <div className="sm:col-span-2">
+                  <TextAreaField label="Service Details" value={serviceForm.details} error={errors.details} onChange={(value) => setServiceForm((current) => ({ ...current, details: value }))} />
+                </div>
+                <InputField label="Estimated Cost" type="number" value={serviceForm.estimatedCost} error={errors.estimatedCost} onChange={(value) => setServiceForm((current) => ({ ...current, estimatedCost: value }))} />
+                <SelectField label="Approval" value={serviceForm.approval} options={['Pending', 'Approved', 'Not Required']} onChange={(value) => setServiceForm((current) => ({ ...current, approval: value }))} />
+                <div className="sm:col-span-2">
+                  <TextAreaField label="Notes" value={serviceForm.notes} onChange={(value) => setServiceForm((current) => ({ ...current, notes: value }))} />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4">
+              <ActionButton label="Cancel" onClick={() => setModal(null)} />
+              <ActionButton label="Create Request" onClick={saveServiceRequest} primary />
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-[200] max-w-sm rounded-xl border px-4 py-3 text-sm font-bold shadow-xl ${
+          toast.type === 'success'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : 'border-red-200 bg-red-50 text-red-700'
+        }`}>
+          {toast.message}
+        </div>
       )}
     </div>
   )
 }
 
-const DashboardView = ({ selectedGuest, setSelectedGuest, setShowBookingModal, setActiveTab }) => (
+const DashboardView = ({
+  stats,
+  guests,
+  guestSearch,
+  setGuestSearch,
+  selectedGuest,
+  setSelectedGuest,
+  exportGuests,
+  openBookingForGuest,
+  openServiceForGuest,
+  requests,
+  setSelectedRequest,
+  setActiveTab,
+}) => (
   <>
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
-      {summaryCards.map((card) => (
-        <div key={card.label} className={`rounded-2xl border ${card.border} bg-white p-5 shadow-sm`}>
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">
-              {card.icon}
-            </div>
-            <div>
-              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-              <p className="mt-2 font-serif text-2xl font-bold text-slate-950">{card.value}</p>
-              <p className={`mt-1 text-xs font-semibold ${card.color}`}>{card.sub}</p>
-            </div>
-          </div>
-        </div>
-      ))}
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+      <SummaryCard label="Live Guests" value={stats.liveGuests} icon="👥" />
+      <SummaryCard label="VIP / VVIP Active" value={stats.vip} icon="👑" />
+      <SummaryCard label="Pending Requests" value={stats.pending} icon="📋" />
+      <SummaryCard label="Hotel Rooms Allocated" value={stats.hotelRooms} icon="🏨" />
+      <SummaryCard label="Vehicle Requests" value={stats.vehicleToday} icon="🚗" />
+      <SummaryCard label="Gifts / Services" value={stats.giftsToday} icon="🎁" />
+      <SummaryCard label="Total Service Cost" value={money(stats.totalCost)} icon="💰" />
     </section>
 
-    <section className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_430px]">
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_380px]">
       <div className="space-y-5">
-        <Panel title="Live Guests / Active Customers">
-          <div className="grid gap-3 border-b border-slate-200 p-4 lg:grid-cols-[1fr_auto_auto]">
-            <input className={inputClass} placeholder="Search guest..." />
-            <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              Filter
-            </button>
-            <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              Export
-            </button>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center">
+            <div className="flex-1">
+              <h2 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">Live Guests / Active Customers</h2>
+            </div>
+            <input className={inputClass} value={guestSearch} onChange={(event) => setGuestSearch(event.target.value)} placeholder="Search guest, CID, badge or location..." />
+            <ActionButton label="Export CSV" onClick={exportGuests} />
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1050px] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+              <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Badge</th>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Current Location</th>
-                  <th className="px-4 py-3">Play Status</th>
-                  <th className="px-4 py-3">Today Buy-In</th>
-                  <th className="px-4 py-3">Wallet / Exposure</th>
-                  <th className="px-4 py-3">Last Service</th>
-                  <th className="px-4 py-3">GRE Assigned</th>
-                  <th className="px-4 py-3">Action</th>
+                  {['Badge', 'Customer', 'Category', 'Current Location', 'Play Status', 'Today Buy-In', 'Wallet / Exposure', 'Last Service', 'GRE', 'Action'].map((heading) => (
+                    <th key={heading} className="px-4 py-3">{heading}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {liveGuests.map((guest) => (
-                  <tr
-                    key={guest.badge}
-                    onClick={() => setSelectedGuest(guest)}
-                    className={`cursor-pointer hover:bg-slate-50 ${selectedGuest.badge === guest.badge ? 'bg-yellow-50/60' : ''}`}
-                  >
-                    <td className="px-4 py-4">
-                      <span className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-1 font-mono text-sm font-bold text-yellow-700">
-                        {guest.badge}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="font-bold text-slate-950">{guest.customer}</p>
-                      <p className="text-xs text-slate-500">{guest.cid}</p>
-                    </td>
-                    <td className="px-4 py-4"><StatusBadge>{guest.category}</StatusBadge></td>
-                    <td className="px-4 py-4 text-slate-700">{guest.location}</td>
-                    <td className="px-4 py-4"><StatusBadge>{guest.playStatus}</StatusBadge></td>
-                    <td className="px-4 py-4 font-bold text-slate-800">{guest.buyIn}</td>
-                    <td className={`px-4 py-4 font-extrabold ${guest.wallet.startsWith('-') ? 'text-red-600' : 'text-emerald-600'}`}>{guest.wallet}</td>
-                    <td className="px-4 py-4 text-slate-700">{guest.lastService}</td>
-                    <td className="px-4 py-4 font-bold text-slate-700">{guest.gre}</td>
-                    <td className="px-4 py-4">
-                      <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                        View
-                      </button>
-                    </td>
+                {guests.map((guest) => (
+                  <tr key={guest.badge} className={selectedGuest?.badge === guest.badge ? 'bg-amber-50/60' : 'hover:bg-slate-50'}>
+                    <td className="px-4 py-4"><BadgeNumber value={guest.badge} /></td>
+                    <td className="px-4 py-4"><p className="font-black text-slate-950">{guest.name}</p><p className="text-xs text-slate-500">{guest.cid}</p></td>
+                    <td className="px-4 py-4"><StatusPill value={guest.category} /></td>
+                    <td className="px-4 py-4">{guest.location}</td>
+                    <td className="px-4 py-4"><StatusPill value={guest.playStatus} /></td>
+                    <td className="px-4 py-4 font-bold">{money(guest.buyIn)}</td>
+                    <td className={`px-4 py-4 font-black ${guest.exposure < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{money(guest.exposure)}</td>
+                    <td className="px-4 py-4">{guest.lastService}</td>
+                    <td className="px-4 py-4 font-semibold">{guest.gre}</td>
+                    <td className="px-4 py-4"><ActionButton label="View" onClick={() => setSelectedGuest(guest)} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </Panel>
+        </div>
 
-        <Panel title="Pending Service Requests / Service Queue">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Request ID</th>
-                  <th className="px-4 py-3">Badge</th>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">Service Type</th>
-                  <th className="px-4 py-3">Est. Cost</th>
-                  <th className="px-4 py-3">Approval</th>
-                  <th className="px-4 py-3">Delivery</th>
-                  <th className="px-4 py-3">Assigned GRE</th>
-                  <th className="px-4 py-3">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {pendingRequests.map((request) => (
-                  <tr key={request.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-4 font-mono text-xs">{request.id}</td>
-                    <td className="px-4 py-4 font-mono font-bold">{request.badge}</td>
-                    <td className="px-4 py-4 font-bold text-slate-950">{request.customer}</td>
-                    <td className="px-4 py-4">{request.type}</td>
-                    <td className="px-4 py-4 font-bold">{request.cost}</td>
-                    <td className="px-4 py-4"><StatusBadge>{request.approval}</StatusBadge></td>
-                    <td className="px-4 py-4"><StatusBadge>{request.delivery}</StatusBadge></td>
-                    <td className="px-4 py-4">{request.gre}</td>
-                    <td className="px-4 py-4">
-                      <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">Pending Service Requests</h2>
           </div>
-        </Panel>
-
-        <div className="grid gap-4 lg:grid-cols-5">
-          {recentRecords.map((record) => (
-            <div key={record.title} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-2xl">{record.icon}</div>
-              <p className="mt-3 font-bold text-slate-950">{record.title}</p>
-              <p className="mt-1 text-sm text-slate-500">{record.desc}</p>
-              <div className="mt-3 flex items-center justify-between">
-                <StatusBadge>{record.status}</StatusBadge>
-                <span className="text-xs text-slate-400">{record.time}</span>
-              </div>
-            </div>
-          ))}
+          <div className="divide-y divide-slate-100">
+            {requests.slice(0, 5).map((request) => (
+              <button
+                type="button"
+                key={request.id}
+                onClick={() => {
+                  setSelectedRequest(request)
+                  setActiveTab('Service Records')
+                }}
+                className="grid w-full grid-cols-[120px_1fr_130px_130px] gap-3 px-5 py-4 text-left text-sm hover:bg-slate-50"
+              >
+                <span className="font-mono font-black text-sky-700">{request.id}</span>
+                <span><strong>{request.customer}</strong><br /><span className="text-xs text-slate-500">{request.serviceType} · {request.details}</span></span>
+                <span className="font-bold">{money(request.estimatedCost)}</span>
+                <StatusPill value={request.status} />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <SelectedGuestPanel
-        guest={selectedGuest}
-        setShowBookingModal={setShowBookingModal}
-        setActiveTab={setActiveTab}
-      />
+      <aside className="space-y-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">Selected Customer Service Profile</h2>
+          <div className="mt-5 rounded-xl bg-slate-50 p-4">
+            <h3 className="font-serif text-2xl font-black">{selectedGuest.name}</h3>
+            <p className="mt-1 text-sm text-slate-500">Badge {selectedGuest.badge} · {selectedGuest.category}</p>
+          </div>
+          <div className="mt-4 space-y-3">
+            <DetailLine label="CID" value={selectedGuest.cid} />
+            <DetailLine label="Current Location" value={selectedGuest.location} />
+            <DetailLine label="Play Status" value={selectedGuest.playStatus} />
+            <DetailLine label="Today Buy-In" value={money(selectedGuest.buyIn)} />
+            <DetailLine label="Wallet / Exposure" value={money(selectedGuest.exposure)} />
+            <DetailLine label="Assigned GRE" value={selectedGuest.gre} />
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <ActionButton label="Book Hotel" onClick={() => openBookingForGuest(selectedGuest)} />
+            <ActionButton label="Arrange Travel" onClick={() => openServiceForGuest('Vehicle Assignment', selectedGuest)} />
+            <ActionButton label="Book Ticket" onClick={() => openServiceForGuest('Ticket Booking', selectedGuest)} />
+            <ActionButton label="Issue Gift" onClick={() => openServiceForGuest('Gift / Service', selectedGuest)} />
+            <div className="col-span-2"><ActionButton label="Request F&B" onClick={() => openServiceForGuest('Food (F&B)', selectedGuest)} full /></div>
+          </div>
+        </div>
+      </aside>
     </section>
   </>
 )
 
-const SelectedGuestPanel = ({ guest, setShowBookingModal, setActiveTab }) => (
-  <aside className="space-y-5 xl:sticky xl:top-24 self-start">
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">
-        Selected Customer Service Profile
-      </h2>
-
-      <div className="mt-5 flex items-center gap-4">
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 text-3xl">
-          👤
-        </div>
-        <div>
-          <p className="font-serif text-2xl font-bold text-slate-950">{guest.customer}</p>
-          <p className="text-sm text-slate-500">Badge No. {guest.badge}</p>
-        </div>
-        <div className="ml-auto"><StatusBadge>{guest.category}</StatusBadge></div>
-      </div>
-
-      <div className="mt-5 space-y-2 text-sm">
-        <ProfileLine label="CID" value={guest.cid} />
-        <ProfileLine label="Current Location" value={guest.location} />
-        <ProfileLine label="Play Status" value={guest.playStatus} />
-        <ProfileLine label="Today Buy-In" value={guest.buyIn} />
-        <ProfileLine label="Wallet / Exposure" value={guest.wallet} />
-        <ProfileLine label="Last Service Given" value={guest.lastService} />
-        <ProfileLine label="Assigned GRE" value={guest.gre} />
-      </div>
-
-      <div className="mt-5">
-        <p className="mb-3 text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-          Eligible Services
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {['Hotel', 'Travel', 'Tickets', 'Gift / Service', 'F&B'].map((service) => (
-            <span key={service} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-              ✓ {service}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={() => setShowBookingModal(true)}
-          className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm font-bold text-yellow-700 hover:bg-yellow-100"
-        >
-          Book Hotel
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('Vehicle Assignment')}
-          className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 hover:bg-sky-100"
-        >
-          Arrange Travel
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('Ticket Booking')}
-          className="rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm font-bold text-purple-700 hover:bg-purple-100"
-        >
-          Book Ticket
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('Gifts & Services')}
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-100"
-        >
-          Issue Gift
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('Food (F&B) Requests')}
-          className="col-span-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-700 hover:bg-orange-100"
-        >
-          Request F&B
-        </button>
-      </div>
-
-      <button className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
-        View Service History
-      </button>
-    </div>
-
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">
-        Customer Summary This Month
-      </h2>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <MiniSummary label="Buy-In" value="NPR 1,250,000" />
-        <MiniSummary label="Win/Loss" value="NPR 320,000" color="green" />
-        <MiniSummary label="Wallet / Exposure" value="NPR 248,600" color="green" />
-        <MiniSummary label="Visits" value="8" />
-      </div>
-    </div>
-  </aside>
-)
-
-const HotelBookingRecords = ({ setShowBookingModal }) => (
+const HotelBookingView = ({
+  stats,
+  bookings,
+  search,
+  setSearch,
+  hotelFilter,
+  setHotelFilter,
+  statusFilter,
+  setStatusFilter,
+  openBooking,
+  exportBookings,
+  selectedBooking,
+  setSelectedBooking,
+  updateBookingStatus,
+}) => (
   <section className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_330px]">
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-serif text-2xl font-bold text-slate-950">Hotel Booking Records</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Issued booking receipts, hotel stay verification, and 15-day billing cycle tracking.
-          </p>
+          <h2 className="font-serif text-2xl font-black">Hotel Booking Records</h2>
+          <p className="mt-1 text-sm text-slate-500">Issue receipts, verify returned hotel documents and forward verified bills to Accounts.</p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setShowBookingModal(true)}
-          className="rounded-lg bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
-        >
-          + New Booking
-        </button>
+        <ActionButton label="+ New Booking" onClick={openBooking} primary />
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {hotelCards.map((card) => (
-          <div key={card.label} className={`rounded-2xl border ${card.border} bg-white p-5 shadow-sm`}>
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">
-                {card.icon}
-              </div>
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-                <p className="mt-2 font-serif text-xl font-bold text-slate-950">{card.value}</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">{card.sub}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </section>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <SummaryCard label="Total Bookings" value={stats.total} icon="🏨" />
+        <SummaryCard label="Pending Receipt Return" value={stats.pendingReceipt} icon="📄" />
+        <SummaryCard label="Verified" value={stats.verified} icon="✅" />
+        <SummaryCard label="Sent to Accounts" value={stats.accounts} icon="💰" />
+        <SummaryCard label="Estimated Cost" value={money(stats.estimatedCost)} icon="🌕" />
+      </div>
 
-      <Panel title="Hotel Booking Records Directory">
-        <div className="grid gap-3 border-b border-slate-200 p-4 lg:grid-cols-4">
-          <input className={inputClass} placeholder="Search by CID, badge, bill no, customer, hotel..." />
-          <select className={inputClass}><option>All Hotels</option></select>
-          <select className={inputClass}><option>All Room Types</option></select>
-          <select className={inputClass}><option>All Statuses</option></select>
-        </div>
-
-        <div className="flex flex-wrap gap-3 border-b border-slate-200 p-4">
-          <button className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">Excel</button>
-          <button className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700">PDF</button>
-          <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700">Print</button>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-4">
+          <input className={inputClass} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search booking, bill, customer, CID or badge..." />
+          <select className={inputClass} value={hotelFilter} onChange={(event) => setHotelFilter(event.target.value)}>
+            <option>All Hotels</option>
+            <option>Summit Grand Hotel</option>
+            <option>Hotel Everest Crown</option>
+            <option>Hyatt Kathmandu</option>
+            <option>Soaltee Hotel</option>
+          </select>
+          <select className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option>All Statuses</option>
+            <option>Receipt Returned</option>
+            <option>Pending Return</option>
+            <option>Verified</option>
+            <option>Not Verified</option>
+            <option>Ready for Accounts</option>
+            <option>Sent to Accounts</option>
+          </select>
+          <ActionButton label="Export CSV" onClick={exportBookings} full />
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1500px] text-left text-xs">
-            <thead className="border-b border-slate-200 bg-slate-50 uppercase tracking-[0.12em] text-slate-500">
+          <table className="w-full min-w-[1350px] text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500">
               <tr>
-                <th className="px-3 py-3">Booking ID</th>
-                <th className="px-3 py-3">Bill No</th>
-                <th className="px-3 py-3">Badge</th>
-                <th className="px-3 py-3">CID</th>
-                <th className="px-3 py-3">Customer</th>
-                <th className="px-3 py-3">Category</th>
-                <th className="px-3 py-3">Hotel Name</th>
-                <th className="px-3 py-3">Room Type</th>
-                <th className="px-3 py-3">Rooms</th>
-                <th className="px-3 py-3">Check-In</th>
-                <th className="px-3 py-3">Check-Out</th>
-                <th className="px-3 py-3">Nights</th>
-                <th className="px-3 py-3">Estimated Cost</th>
-                <th className="px-3 py-3">Receipt Return</th>
-                <th className="px-3 py-3">Verification</th>
-                <th className="px-3 py-3">Accounts</th>
-                <th className="px-3 py-3">Action</th>
+                {['Booking ID', 'Bill No', 'Badge', 'CID', 'Customer', 'Category', 'Hotel', 'Room Type', 'Rooms', 'Check-In', 'Check-Out', 'Nights', 'Estimated Cost', 'Receipt', 'Verification', 'Accounts', 'Action'].map((heading) => (
+                  <th key={heading} className="px-3 py-3">{heading}</th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {hotelBookings.map((booking) => (
-                <tr key={booking.bookingId} className="hover:bg-slate-50">
-                  <td className="px-3 py-4 font-mono">{booking.bookingId}</td>
-                  <td className="px-3 py-4">{booking.billNo}</td>
-                  <td className="px-3 py-4 font-mono font-bold">{booking.badge}</td>
-                  <td className="px-3 py-4 font-mono">{booking.cid}</td>
-                  <td className="px-3 py-4 font-bold text-slate-950">{booking.customer}</td>
-                  <td className="px-3 py-4"><StatusBadge>{booking.category}</StatusBadge></td>
+              {bookings.map((booking) => (
+                <tr key={booking.id} className={selectedBooking?.id === booking.id ? 'bg-amber-50/60' : 'hover:bg-slate-50'}>
+                  <td className="px-3 py-4 font-mono font-black text-sky-700">{booking.id}</td>
+                  <td className="px-3 py-4 font-mono text-xs">{booking.billNo}</td>
+                  <td className="px-3 py-4"><BadgeNumber value={booking.badge} /></td>
+                  <td className="px-3 py-4">{booking.cid}</td>
+                  <td className="px-3 py-4 font-black">{booking.customer}</td>
+                  <td className="px-3 py-4"><StatusPill value={booking.category} /></td>
                   <td className="px-3 py-4">{booking.hotel}</td>
-                  <td className="px-3 py-4">{booking.room}</td>
+                  <td className="px-3 py-4">{booking.roomType}</td>
                   <td className="px-3 py-4">{booking.rooms}</td>
                   <td className="px-3 py-4">{booking.checkIn}</td>
                   <td className="px-3 py-4">{booking.checkOut}</td>
                   <td className="px-3 py-4">{booking.nights}</td>
-                  <td className="px-3 py-4 font-bold">{booking.cost}</td>
-                  <td className="px-3 py-4"><StatusBadge>{booking.receipt}</StatusBadge></td>
-                  <td className="px-3 py-4"><StatusBadge>{booking.verification}</StatusBadge></td>
-                  <td className="px-3 py-4"><StatusBadge>{booking.accounts}</StatusBadge></td>
-                  <td className="px-3 py-4">
-                    <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                      View
-                    </button>
-                  </td>
+                  <td className="px-3 py-4 font-black">{money(booking.estimatedCost)}</td>
+                  <td className="px-3 py-4"><StatusPill value={booking.receiptStatus} /></td>
+                  <td className="px-3 py-4"><StatusPill value={booking.verificationStatus} /></td>
+                  <td className="px-3 py-4"><StatusPill value={booking.accountsStatus} /></td>
+                  <td className="px-3 py-4"><ActionButton label="View" onClick={() => setSelectedBooking(booking)} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </Panel>
+      </div>
     </div>
 
-    <aside className="space-y-5 xl:sticky xl:top-24 self-start">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">
-          15-Day Billing Cycle
-        </h2>
-        <div className="mt-4 space-y-3 text-sm">
-          <ProfileLine label="Current Cycle" value="2026-05-01 → 2026-05-15" />
-          <ProfileLine label="Cycle Status" value="Active" />
-          <ProfileLine label="Total Bookings" value="128" />
-          <ProfileLine label="Total Estimated Amount" value="NPR 5,248,000" />
-          <ProfileLine label="Pending Verification" value="29" />
-          <ProfileLine label="Cycle Ends" value="In 5 days" />
+    <aside className="space-y-4">
+      {selectedBooking ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">Selected Booking</h3>
+          <p className="mt-4 font-mono text-lg font-black text-sky-700">{selectedBooking.id}</p>
+          <p className="mt-1 text-xl font-black">{selectedBooking.customer}</p>
+          <div className="mt-4 space-y-3">
+            <DetailLine label="Hotel" value={selectedBooking.hotel} />
+            <DetailLine label="Stay" value={`${selectedBooking.checkIn} → ${selectedBooking.checkOut}`} />
+            <DetailLine label="Estimated Cost" value={money(selectedBooking.estimatedCost)} />
+            <DetailLine label="Receipt" value={selectedBooking.receiptStatus} />
+            <DetailLine label="Verification" value={selectedBooking.verificationStatus} />
+            <DetailLine label="Accounts" value={selectedBooking.accountsStatus} />
+          </div>
+          <div className="mt-5 space-y-2">
+            {selectedBooking.receiptStatus !== 'Receipt Returned' && (
+              <ActionButton full label="Mark Receipt Returned" onClick={() => updateBookingStatus(selectedBooking.id, { receiptStatus: 'Receipt Returned' }, 'Receipt marked as returned.')} />
+            )}
+            {selectedBooking.verificationStatus !== 'Verified' && (
+              <ActionButton full label="Verify Returned Documents" onClick={() => updateBookingStatus(selectedBooking.id, { receiptStatus: 'Receipt Returned', verificationStatus: 'Verified', accountsStatus: 'Ready for Accounts' }, 'Hotel bill and receipt verified.')} primary />
+            )}
+            {selectedBooking.verificationStatus === 'Verified' && selectedBooking.accountsStatus !== 'Sent to Accounts' && (
+              <ActionButton full label="Forward to Accounts" onClick={() => updateBookingStatus(selectedBooking.id, { accountsStatus: 'Sent to Accounts' }, 'Verified hotel bill forwarded to Accounts.')} primary />
+            )}
+          </div>
         </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">
-          Receipt Verification Workflow
-        </h2>
-        <ol className="mt-4 space-y-3 text-sm text-slate-600">
-          <li>1. Issued to customer by GRE.</li>
-          <li>2. Customer submits at hotel.</li>
-          <li>3. Hotel returns bill with original receipt.</li>
-          <li>4. GRE verifies original issue.</li>
-          <li>5. Forward to Accounts.</li>
-        </ol>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">
-          Quick Actions
-        </h2>
-        <div className="mt-4 space-y-3">
-          <button className="w-full rounded-lg bg-yellow-400 px-4 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">
-            Verify Returned Receipt
-          </button>
-          <button className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
-            Upload Hotel Bill
-          </button>
-          <button className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
-            Forward to Accounts
-          </button>
-        </div>
-      </div>
+      ) : (
+        <EmptyPanel text="Select a hotel booking to review receipt, verification and Accounts status." />
+      )}
     </aside>
   </section>
 )
 
-const ServiceRequestsView = ({ activeTab }) => {
-  const records = getFilteredServices(activeTab)
-  const [selectedRequest, setSelectedRequest] = useState(records[0])
-  const [showServiceModal, setShowServiceModal] = useState(false)
+const ServiceRequestsView = ({
+  activeTab,
+  stats,
+  requests,
+  search,
+  setSearch,
+  typeFilter,
+  setTypeFilter,
+  statusFilter,
+  setStatusFilter,
+  approvalFilter,
+  setApprovalFilter,
+  selectedRequest,
+  setSelectedRequest,
+  openRequest,
+  updateRequest,
+}) => {
+  const tabType =
+    activeTab === 'Vehicle Assignment'
+      ? 'Vehicle Assignment'
+      : activeTab === 'Gifts & Services'
+        ? 'Gift / Service'
+        : activeTab === 'Food (F&B) Requests'
+          ? 'Food (F&B)'
+          : activeTab === 'Ticket Booking'
+            ? 'Ticket Booking'
+            : null
 
-  const serviceTabs = ['Vehicle Assignment', 'Gifts & Services', 'Food (F&B) Requests']
+  const visibleRequests = tabType
+    ? requests.filter((request) => request.serviceType === tabType)
+    : requests
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm font-bold text-slate-500">CRM / GRE / Marketing</p>
-          <h2 className="mt-2 font-serif text-3xl font-bold text-slate-950">
-            <span className="mr-2 text-yellow-500">◆</span>
-            Vehicle Assignment / Gifts & Services / Food Requests
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Create and manage guest services for VIP / VVIP customers.
-          </p>
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_340px]">
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-serif text-2xl font-black">{activeTab}</h2>
+            <p className="mt-1 text-sm text-slate-500">Create, approve, deliver and complete guest service requests.</p>
+          </div>
+          <ActionButton label="+ New Service Request" onClick={openRequest} primary />
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowServiceModal(true)}
-          className="rounded-lg bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
-        >
-          + New Service Request
-        </button>
-      </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard label="Total Requests" value={stats.total} icon="📋" />
+          <SummaryCard label="Pending Approval" value={stats.pending} icon="🎁" />
+          <SummaryCard label="In Progress" value={stats.inProgress} icon="🔔" />
+          <SummaryCard label="Completed" value={stats.completed} icon="✅" />
+        </div>
 
-      <div className="flex gap-2 overflow-x-auto border-b border-slate-200">
-        {serviceTabs.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            className={`shrink-0 border-b-2 px-4 py-3 text-sm font-extrabold ${
-              activeTab === tab
-                ? 'border-yellow-400 text-yellow-700'
-                : 'border-transparent text-slate-500'
-            }`}
-          >
-            {tab === 'Vehicle Assignment' && '🚗 '}
-            {tab === 'Gifts & Services' && '🎁 '}
-            {tab === 'Food (F&B) Requests' && '🍽️ '}
-            {tab}
-          </button>
-        ))}
-      </div>
+        <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+          <input className={inputClass} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search request, CID, badge, customer..." />
+          <select className={inputClass} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+            <option>All Service Types</option>
+            <option>Vehicle Assignment</option>
+            <option>Gift / Service</option>
+            <option>Food (F&B)</option>
+            <option>Ticket Booking</option>
+          </select>
+          <select className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option>All Statuses</option>
+            <option>Pending</option>
+            <option>Pending Approval</option>
+            <option>In Progress</option>
+            <option>Completed</option>
+          </select>
+          <select className={inputClass} value={approvalFilter} onChange={(event) => setApprovalFilter(event.target.value)}>
+            <option>All Approval Statuses</option>
+            <option>Pending</option>
+            <option>Approved</option>
+            <option>Not Required</option>
+          </select>
+        </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {serviceSummaryCards.map((card) => (
-          <div key={card.label} className={`rounded-2xl border ${card.border} bg-white p-5 shadow-sm`}>
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">
-                {card.icon}
-              </div>
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                  {card.label}
-                </p>
-                <p className="mt-2 font-serif text-2xl font-bold text-slate-950">
-                  {card.value}
-                </p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">{card.sub}</p>
-              </div>
-            </div>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">Service Request Records</h3>
           </div>
-        ))}
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_390px]">
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid gap-3 lg:grid-cols-5">
-              <input className={inputClass} defaultValue="18/05/2024 - 18/05/2024" />
-              <select className={inputClass}>
-                <option>All Service Types</option>
-                <option>Vehicle Assignment</option>
-                <option>Gift / Service</option>
-                <option>Food (F&B)</option>
-              </select>
-              <select className={inputClass}>
-                <option>All Status</option>
-                <option>Pending</option>
-                <option>In Progress</option>
-                <option>Completed</option>
-              </select>
-              <select className={inputClass}>
-                <option>All Approval Status</option>
-                <option>Approved</option>
-                <option>Pending</option>
-                <option>Not Required</option>
-              </select>
-              <input className={inputClass} placeholder="Search CID, name, badge, bill no..." />
-            </div>
-          </div>
-
-          <Panel title="Service Request Records">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Req. ID</th>
-                    <th className="px-4 py-3">Service Type</th>
-                    <th className="px-4 py-3">Customer</th>
-                    <th className="px-4 py-3">CID / Badge</th>
-                    <th className="px-4 py-3">Details</th>
-                    <th className="px-4 py-3">Est. Cost</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Approval</th>
-                    <th className="px-4 py-3">Delivery</th>
-                    <th className="px-4 py-3">Action</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-100">
-                  {records.map((request) => (
-                    <tr
-                      key={request.id}
-                      onClick={() => setSelectedRequest(request)}
-                      className={`cursor-pointer hover:bg-slate-50 ${
-                        selectedRequest?.id === request.id ? 'bg-yellow-50/60' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-4 font-mono font-bold text-sky-700">{request.id}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{request.icon}</span>
-                          <span className="font-bold text-slate-800">{request.type}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <p className="font-bold text-slate-950">{request.customer}</p>
-                        <StatusBadge>{request.category}</StatusBadge>
-                      </td>
-                      <td className="px-4 py-4 text-slate-700">
-                        <p>{request.cid}</p>
-                        <p>Badge {request.badge}</p>
-                      </td>
-                      <td className="px-4 py-4 text-slate-700">{request.details}</td>
-                      <td className="px-4 py-4 font-bold text-slate-900">{request.cost}</td>
-                      <td className="px-4 py-4"><StatusBadge>{request.status}</StatusBadge></td>
-                      <td className="px-4 py-4"><StatusBadge>{request.approval}</StatusBadge></td>
-                      <td className="px-4 py-4"><StatusBadge>{request.delivery}</StatusBadge></td>
-                      <td className="px-4 py-4">
-                        <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                          ⋮
-                        </button>
-                      </td>
-                    </tr>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                <tr>
+                  {['Request ID', 'Service Type', 'Customer', 'CID / Badge', 'Details', 'Est. Cost', 'Status', 'Approval', 'Delivery', 'Assigned GRE', 'Action'].map((heading) => (
+                    <th key={heading} className="px-4 py-3">{heading}</th>
                   ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-500">
-              <span>Showing 1 to {records.length} of 48 records</span>
-              <div className="flex gap-2">
-                <button className="rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-1.5 text-sm font-bold text-yellow-700">1</button>
-                <button className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold">2</button>
-                <button className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold">3</button>
-              </div>
-            </div>
-          </Panel>
-        </div>
-
-        <ServiceDetailPanel request={selectedRequest} />
-      </section>
-
-      {showServiceModal && (
-        <NewServiceRequestModal
-          activeTab={activeTab}
-          onClose={() => setShowServiceModal(false)}
-        />
-      )}
-    </div>
-  )
-}
-
-const getFilteredServices = (activeTab) => {
-  if (activeTab === 'Vehicle Assignment') {
-    return serviceRequests.filter((item) => item.type === 'Vehicle Assignment')
-  }
-
-  if (activeTab === 'Gifts & Services') {
-    return serviceRequests.filter((item) => item.type === 'Gift / Service')
-  }
-
-  if (activeTab === 'Food (F&B) Requests') {
-    return serviceRequests.filter((item) => item.type === 'Food (F&B)')
-  }
-
-  return serviceRequests
-}
-
-const ServiceDetailPanel = ({ request }) => {
-  if (!request) return null
-
-  return (
-    <aside className="space-y-5 xl:sticky xl:top-24 self-start">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">
-            Selected Request Details
-          </h2>
-          <button className="text-slate-400">×</button>
-        </div>
-
-        <div className="mt-5 flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-yellow-100 text-3xl">
-            {request.icon}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {visibleRequests.map((request) => (
+                  <tr key={request.id} className={selectedRequest?.id === request.id ? 'bg-amber-50/60' : 'hover:bg-slate-50'}>
+                    <td className="px-4 py-4 font-mono font-black text-sky-700">{request.id}</td>
+                    <td className="px-4 py-4 font-black">{request.serviceType}</td>
+                    <td className="px-4 py-4"><p className="font-black">{request.customer}</p><StatusPill value={request.category} /></td>
+                    <td className="px-4 py-4">{request.cid}<br />Badge {request.badge}</td>
+                    <td className="px-4 py-4">{request.details}</td>
+                    <td className="px-4 py-4 font-black">{money(request.estimatedCost)}</td>
+                    <td className="px-4 py-4"><StatusPill value={request.status} /></td>
+                    <td className="px-4 py-4"><StatusPill value={request.approval} /></td>
+                    <td className="px-4 py-4"><StatusPill value={request.delivery} /></td>
+                    <td className="px-4 py-4 font-semibold">{request.assignedGre}</td>
+                    <td className="px-4 py-4"><ActionButton label="View" onClick={() => setSelectedRequest(request)} /></td>
+                  </tr>
+                ))}
+                {visibleRequests.length === 0 && (
+                  <tr><td colSpan={11} className="px-5 py-16 text-center text-slate-500">No service requests match the selected filters.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <p className="font-mono text-xl font-extrabold text-slate-950">{request.id}</p>
-            <StatusBadge>{request.status}</StatusBadge>
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <p className="font-bold text-yellow-700">{request.type}</p>
-          <p className="text-sm text-slate-500">{request.details}</p>
-        </div>
-
-        <DetailSection
-          title="Customer Information"
-          rows={[
-            ['Customer Name', request.customer],
-            ['CID / Badge', `${request.cid} / ${request.badge}`],
-            ['Category', request.category],
-            ['Current Location', 'Gaming Floor · Table 1'],
-            ['Assigned GRE', request.gre],
-          ]}
-        />
-
-        <DetailSection
-          title="Service Details"
-          rows={[
-            ['Pickup Location', request.pickup],
-            ['Drop Location', request.drop],
-            ['Date & Time', request.details],
-            ['Vehicle No.', request.vehicle],
-            ['Driver Name', request.driver],
-            ['Driver Contact', request.contact],
-            ['Estimated Cost', request.cost],
-            ['Actual Cost', '—'],
-            ['Remarks', request.remarks],
-          ]}
-        />
-
-        <DetailSection
-          title="Status & Approval"
-          rows={[
-            ['Status', request.status],
-            ['Approval Status', request.approval],
-            ['Approved By', 'Director Admin'],
-            ['Approved On', '18 May 2024, 09:15 AM'],
-            ['Delivery Status', request.delivery],
-          ]}
-        />
-
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          <button className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
-            View History
-          </button>
-          <button className="rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-3 text-xs font-bold text-yellow-700 hover:bg-yellow-100">
-            Edit
-          </button>
-          <button className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-xs font-bold text-red-700 hover:bg-red-100">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </aside>
-  )
-}
-
-const DetailSection = ({ title, rows }) => (
-  <div className="mt-5 border-t border-slate-200 pt-4">
-    <h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-      {title}
-    </h3>
-    <div className="mt-3 space-y-2">
-      {rows.map(([label, value]) => (
-        <div key={label} className="grid grid-cols-[130px_1fr] gap-3 text-sm">
-          <span className="text-slate-500">{label}</span>
-          <span className="font-bold text-slate-800">{value}</span>
-        </div>
-      ))}
-    </div>
-  </div>
-)
-
-const NewServiceRequestModal = ({ activeTab, onClose }) => {
-  const isVehicle = activeTab === 'Vehicle Assignment'
-  const isGift = activeTab === 'Gifts & Services'
-  const isFood = activeTab === 'Food (F&B) Requests'
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-sm font-bold text-slate-500">CRM / GRE / Marketing</p>
-            <h2 className="mt-2 font-serif text-3xl font-bold text-slate-950">
-              <span className="mr-2 text-yellow-500">◆</span>
-              New {activeTab}
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Create service request linked with CID, business date, badge/session, approval, delivery and cost tracking.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="mt-6 grid gap-5 lg:grid-cols-2">
-          <FormCard title="Customer & Session">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="CID *"><input className={inputClass} defaultValue="CID-100387" /></Field>
-              <Field label="Customer Name *"><input className={inputClass} defaultValue="Raj Sharma" /></Field>
-              <Field label="Badge / Session No."><input className={inputClass} defaultValue="087" /></Field>
-              <Field label="Casino Date *"><input className={inputClass} defaultValue="2026-05-18" /></Field>
-              <Field label="Customer Category"><select className={inputClass}><option>VIP</option><option>VVIP</option><option>Standard</option></select></Field>
-              <Field label="Current Location"><input className={inputClass} defaultValue="Gaming Floor · Table 1" /></Field>
-            </div>
-          </FormCard>
-
-          <FormCard title="Cost & Approval">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Estimated Cost *"><input className={inputClass} defaultValue="NPR 12,000" /></Field>
-              <Field label="Actual Cost"><input className={inputClass} placeholder="Enter after completion" /></Field>
-              <Field label="Issued By GRE"><input className={inputClass} defaultValue="Karan Lama" /></Field>
-              <Field label="Approved By"><select className={inputClass}><option>Director Admin</option><option>GRE Manager</option></select></Field>
-              <Field label="Approval Status"><select className={inputClass}><option>Pending Approval</option><option>Approved</option><option>Not Required</option></select></Field>
-              <Field label="Delivery Status"><select className={inputClass}><option>Scheduled</option><option>In Progress</option><option>Delivered</option><option>Completed</option></select></Field>
-            </div>
-          </FormCard>
-        </div>
-
-        {isVehicle && (
-          <FormCard title="Vehicle Assignment Details">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Travel Type *"><select className={inputClass}><option>Airport Pickup</option><option>Drop</option><option>Local</option><option>Other</option></select></Field>
-              <Field label="Pickup Location *"><input className={inputClass} defaultValue="Tribhuvan Airport" /></Field>
-              <Field label="Drop Location *"><input className={inputClass} defaultValue="Royal Summit Casino" /></Field>
-              <Field label="Date & Time *"><input className={inputClass} defaultValue="19 May 2024, 10:00 AM" /></Field>
-              <Field label="Vehicle Number"><input className={inputClass} defaultValue="B AB 1234" /></Field>
-              <Field label="Driver Name"><input className={inputClass} defaultValue="Mahesh Thapa" /></Field>
-              <Field label="Driver Contact"><input className={inputClass} defaultValue="9841234567" /></Field>
-              <Field label="Confirmed By Customer"><select className={inputClass}><option>Pending</option><option>Confirmed</option></select></Field>
-              <Field label="Status"><select className={inputClass}><option>Scheduled</option><option>In Progress</option><option>Completed</option></select></Field>
-            </div>
-          </FormCard>
-        )}
-
-        {isGift && (
-          <FormCard title="Gift / Service Details">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Gift / Service Type *"><select className={inputClass}><option>Welcome Gift</option><option>Cash Coupon</option><option>Offer</option><option>Special Benefit</option></select></Field>
-              <Field label="Item / Service Name *"><input className={inputClass} defaultValue="Welcome Gift Pack" /></Field>
-              <Field label="Quantity *"><input className={inputClass} defaultValue="1" /></Field>
-              <Field label="Inventory Linked"><select className={inputClass}><option>Yes</option><option>No</option></select></Field>
-              <Field label="Received By Customer"><select className={inputClass}><option>Pending</option><option>Received</option></select></Field>
-              <Field label="Delivery Status"><select className={inputClass}><option>Pending</option><option>Delivered</option></select></Field>
-            </div>
-          </FormCard>
-        )}
-
-        {isFood && (
-          <FormCard title="Food / F&B Request Details">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Customer Location *"><input className={inputClass} defaultValue="Baccarat Table 3" /></Field>
-              <Field label="Food / Drink Item *"><input className={inputClass} defaultValue="Fruit Platter & Juice" /></Field>
-              <Field label="Quantity *"><input className={inputClass} defaultValue="1" /></Field>
-              <Field label="Special Instruction"><input className={inputClass} placeholder="No ice, less spicy, etc." /></Field>
-              <Field label="Sent To Kitchen / Bar"><select className={inputClass}><option>Kitchen</option><option>Bar</option></select></Field>
-              <Field label="Prepared By"><input className={inputClass} placeholder="Kitchen staff name" /></Field>
-              <Field label="Delivered By"><input className={inputClass} placeholder="Delivery staff name" /></Field>
-              <Field label="Received / Confirmed By"><input className={inputClass} placeholder="Customer or GRE" /></Field>
-              <Field label="Status"><select className={inputClass}><option>Sent to Department</option><option>Preparing</option><option>Delivered</option><option>Completed</option></select></Field>
-            </div>
-          </FormCard>
-        )}
-
-        <FormCard title="Remarks & Audit">
-          <textarea
-            className="min-h-28 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
-            placeholder="Remarks, correction reason, special instruction, approval note..."
-          />
-        </FormCard>
-
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-          >
-            Cancel
-          </button>
-          <button className="rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
-            Save Draft
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300"
-          >
-            Submit Request
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const NewHotelBookingModal = ({ onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-    <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-sm font-bold text-slate-500">CRM / GRE / Marketing &gt; New Hotel Booking</p>
-          <h2 className="mt-2 font-serif text-3xl font-bold text-slate-950">
-            <span className="mr-2 text-yellow-500">◆</span>
-            New Hotel Booking
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Create and issue a hotel booking record and guest receipt for official CRM/GRE tracking.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">Save Draft</button>
-          <button className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2.5 text-sm font-bold text-yellow-700 hover:bg-yellow-100">Issue Receipt</button>
-          <button className="rounded-lg bg-yellow-400 px-4 py-2.5 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">Submit Booking</button>
-          <button onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50">×</button>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,2fr)_330px]">
-        <div className="space-y-5">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <FormCard title="1 Booking Information">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="CID *"><input className={inputClass} defaultValue="CID-000987" /></Field>
-                <Field label="Customer Name *"><input className={inputClass} defaultValue="Raj Sharma" /></Field>
-                <Field label="Date Auto *"><input className={inputClass} defaultValue="2026-05-16 (Today)" /></Field>
-                <Field label="Casino Date *"><input className={inputClass} defaultValue="2026-05-16" /></Field>
-                <Field label="Room Quantity *"><select className={inputClass}><option>1 Room</option><option>2 Rooms</option></select></Field>
-                <Field label="Hotel Name *"><select className={inputClass}><option>Summit Grand Hotel</option><option>Hotel Everest Crown</option></select></Field>
-                <div className="md:col-span-2">
-                  <Field label="Room Type *"><select className={inputClass}><option>Deluxe King Room</option><option>Executive Suite</option><option>Deluxe Twin</option></select></Field>
-                </div>
-              </div>
-            </FormCard>
-
-            <FormCard title="2 Issued Receipt / Stay Details">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Bill No *"><input className={inputClass} defaultValue="HB-2026-0516-00987" /></Field>
-                <Field label="Check-In Date *"><input className={inputClass} defaultValue="2026-05-16" /></Field>
-                <Field label="Check-Out Date *"><input className={inputClass} defaultValue="2026-05-18" /></Field>
-                <Field label="Guest Name Auto *"><input className={inputClass} defaultValue="Raj Sharma" /></Field>
-                <div className="md:col-span-2">
-                  <Field label="Remarks"><input className={inputClass} defaultValue="VIP guest - 2 nights stay with breakfast." /></Field>
-                </div>
-                <Field label="Issued By *"><select className={inputClass}><option>Daniel Smith</option></select></Field>
-                <Field label="Approved By *"><select className={inputClass}><option>Priya Tamang</option></select></Field>
-                <Field label="Received By Hotel Staff *"><select className={inputClass}><option>Amit Gurung</option></select></Field>
-              </div>
-            </FormCard>
-          </div>
-
-          <div className="rounded-2xl border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-800">
-            <p className="font-extrabold">This receipt is to be issued to the customer and submitted to the hotel.</p>
-            <p className="mt-1">Hotel must return the original receipt along with the final bill for verification.</p>
-          </div>
-
-          <div className="grid gap-5 lg:grid-cols-3">
-            <UploadBox title="Receipt Copy Upload" desc="PDF, JPG, PNG (Max 5MB)" />
-            <UploadBox title="Hotel Bill Pending" desc="Upload when received from hotel" />
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <h3 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">Verification Status</h3>
-              <div className="mt-4"><StatusBadge>Not Verified</StatusBadge></div>
-              <p className="mt-3 text-sm text-slate-500">
-                Original receipt and bill must be verified before forwarding to Accounts.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <aside className="space-y-5">
+      <aside className="space-y-4">
+        {selectedRequest ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">Booking Summary</h3>
-            <div className="mt-4 space-y-3 text-sm">
-              <ProfileLine label="Customer Category" value="VIP" />
-              <ProfileLine label="Nights" value="2" />
-              <ProfileLine label="Estimated Cost" value="NPR 48,000" />
-              <ProfileLine label="Booking Status" value="Pending" />
-              <ProfileLine label="Payment Cycle" value="15 Days" />
+            <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">Selected Request Details</h3>
+            <p className="mt-4 font-mono text-xl font-black">{selectedRequest.id}</p>
+            <div className="mt-2"><StatusPill value={selectedRequest.status} /></div>
+            <p className="mt-4 text-lg font-black text-amber-700">{selectedRequest.serviceType}</p>
+            <p className="mt-1 text-sm text-slate-500">{selectedRequest.details}</p>
+
+            <div className="mt-5 space-y-3 border-t border-slate-200 pt-5">
+              <DetailLine label="Customer" value={selectedRequest.customer} />
+              <DetailLine label="CID / Badge" value={`${selectedRequest.cid} / ${selectedRequest.badge}`} />
+              <DetailLine label="Category" value={selectedRequest.category} />
+              <DetailLine label="Current Location" value={selectedRequest.location} />
+              <DetailLine label="Assigned GRE" value={selectedRequest.assignedGre} />
+              <DetailLine label="Estimated Cost" value={money(selectedRequest.estimatedCost)} />
+              <DetailLine label="Approval" value={selectedRequest.approval} />
+              <DetailLine label="Delivery" value={selectedRequest.delivery} />
+            </div>
+
+            <div className="mt-5 space-y-2">
+              {selectedRequest.approval === 'Pending' && (
+                <ActionButton full label="Approve Request" primary onClick={() => updateRequest(selectedRequest.id, { approval: 'Approved', status: 'In Progress' }, 'Service request approved.')} />
+              )}
+              {selectedRequest.status !== 'Completed' && selectedRequest.approval !== 'Pending' && (
+                <ActionButton full label="Mark Completed / Delivered" primary onClick={() => updateRequest(selectedRequest.id, { status: 'Completed', delivery: selectedRequest.serviceType === 'Ticket Booking' ? 'Ticket Issued' : 'Delivered' }, 'Service request completed.')} />
+              )}
+              <ActionButton full label="Print Service Slip" onClick={() => window.print()} />
             </div>
           </div>
+        ) : (
+          <EmptyPanel text="Select a service request to review and update it." />
+        )}
+      </aside>
+    </section>
+  )
+}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">Booking Workflow</h3>
-            <ol className="mt-4 space-y-3 text-sm text-slate-600">
-              <li>1. Receipt issued to customer by GRE.</li>
-              <li>2. Customer submits receipt to hotel.</li>
-              <li>3. Hotel returns bill with original receipt.</li>
-              <li>4. GRE verifies original issue.</li>
-              <li>5. Forward to Accounts for 15-day payment cycle.</li>
-            </ol>
-          </div>
-        </aside>
+const SummaryCard = ({ label, value, icon }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex items-start gap-3">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-xl">{icon}</span>
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
+        <p className="mt-2 font-serif text-2xl font-black text-slate-950">{value}</p>
       </div>
     </div>
   </div>
 )
 
-const Panel = ({ title, children }) => (
-  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div className="border-b border-slate-200 px-5 py-4">
-      <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">{title}</h2>
-    </div>
+const ActionButton = ({ label, onClick, primary, full }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`${full ? 'w-full' : ''} rounded-lg border px-4 py-2.5 text-sm font-black transition ${
+      primary
+        ? 'border-amber-400 bg-amber-400 text-slate-950 hover:bg-amber-300'
+        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+    }`}
+  >
+    {label}
+  </button>
+)
+
+const BadgeNumber = ({ value }) => (
+  <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-3 py-1 font-mono font-black text-amber-700">{value}</span>
+)
+
+const StatusPill = ({ value }) => {
+  const text = String(value || '—')
+  const normalized = text.toLowerCase()
+  const success = ['approved', 'completed', 'delivered', 'verified', 'playing', 'receipt returned', 'ready for accounts', 'sent to accounts', 'ticket issued'].some((item) => normalized.includes(item))
+  const warning = ['pending', 'waiting', 'not verified', 'not ready', 'preparing', 'scheduled', 'receipt issued'].some((item) => normalized.includes(item))
+  const info = ['in progress', 'break', 'vip', 'vvip'].some((item) => normalized.includes(item))
+
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
+      success
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : warning
+          ? 'border-amber-200 bg-amber-50 text-amber-700'
+          : info
+            ? 'border-sky-200 bg-sky-50 text-sky-700'
+            : 'border-slate-200 bg-slate-50 text-slate-600'
+    }`}>
+      {text}
+    </span>
+  )
+}
+
+const DetailLine = ({ label, value }) => (
+  <div className="flex items-start justify-between gap-4 text-sm">
+    <span className="text-slate-500">{label}</span>
+    <span className="text-right font-black text-slate-900">{value}</span>
+  </div>
+)
+
+const EmptyPanel = ({ text }) => (
+  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">{text}</div>
+)
+
+const ModalOverlay = ({ children, onClose }) => (
+  <div
+    className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose()
+    }}
+  >
     {children}
   </div>
 )
 
-const FormCard = ({ title, children }) => (
-  <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm first:mt-0">
-    <h3 className="font-serif text-xl font-bold text-slate-950">{title}</h3>
-    <div className="mt-5">{children}</div>
+const ModalHeader = ({ title, description, onClose }) => (
+  <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+    <div>
+      <div className="flex items-center gap-3">
+        <span className="h-2.5 w-2.5 rotate-45 bg-amber-400" />
+        <h2 className="font-serif text-2xl font-black text-slate-950">{title}</h2>
+      </div>
+      <p className="mt-2 text-sm text-slate-500">{description}</p>
+    </div>
+    <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-lg text-slate-500 hover:bg-slate-100">×</button>
   </div>
 )
 
-const Field = ({ label, children }) => (
+const FormSection = ({ title, children }) => (
+  <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+    <h3 className="font-serif text-xl font-black text-slate-950">{title}</h3>
+    {children}
+  </div>
+)
+
+const InputField = ({ label, value, onChange, error, type = 'text' }) => (
   <label className="block">
-    <span className={labelClass}>{label}</span>
-    {children}
+    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</span>
+    <input
+      type={type}
+      min={type === 'number' ? 0 : undefined}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`${inputClass} ${error ? 'border-red-300' : ''}`}
+    />
+    {error && <span className="mt-1 block text-xs font-semibold text-red-600">{error}</span>}
   </label>
 )
 
-const UploadBox = ({ title, desc }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <h3 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">{title}</h3>
-    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
-      <div className="text-3xl">☁️</div>
-      <p className="mt-2 text-sm font-bold text-slate-700">Drag & drop file here or click to browse</p>
-      <p className="mt-1 text-xs text-slate-500">{desc}</p>
-    </div>
-  </div>
+const SelectField = ({ label, value, onChange, options, error }) => (
+  <label className="block">
+    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</span>
+    <select value={value} onChange={(event) => onChange(event.target.value)} className={`${inputClass} ${error ? 'border-red-300' : ''}`}>
+      <option value="">Select</option>
+      {options.map((option) => <option key={option} value={option}>{option}</option>)}
+    </select>
+    {error && <span className="mt-1 block text-xs font-semibold text-red-600">{error}</span>}
+  </label>
 )
 
-const ProfileLine = ({ label, value }) => (
-  <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2 text-sm last:border-b-0">
-    <span className="text-slate-500">{label}</span>
-    <span className="font-extrabold text-slate-950">{value}</span>
-  </div>
+const TextAreaField = ({ label, value, onChange, error }) => (
+  <label className="block">
+    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</span>
+    <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={4} className={`w-full resize-none rounded-lg border bg-white px-4 py-3 text-sm outline-none focus:border-amber-400 ${error ? 'border-red-300' : 'border-slate-200'}`} />
+    {error && <span className="mt-1 block text-xs font-semibold text-red-600">{error}</span>}
+  </label>
 )
 
-const MiniSummary = ({ label, value, color }) => (
-  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-    <p className="text-xs font-bold text-slate-500">{label}</p>
-    <p className={`mt-1 font-extrabold ${color === 'green' ? 'text-emerald-600' : 'text-slate-950'}`}>
-      {value}
-    </p>
-  </div>
-)
-
-const ComingSoonPanel = ({ title }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-    <h2 className="font-serif text-2xl font-bold text-slate-950">{title}</h2>
-    <p className="mt-2 text-sm text-slate-500">
-      This CRM/GRE section will use the same service-request workflow pattern.
-    </p>
-  </div>
-)
+const inputClass =
+  'h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20'
 
 export default CrmGreMarketing
