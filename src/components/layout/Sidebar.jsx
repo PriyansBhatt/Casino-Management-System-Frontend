@@ -2,14 +2,13 @@ import { NavLink } from 'react-router-dom'
 
 const sidebarSections = [
   {
-    title: 'OPERATIONS',
-    items: [
-      { label: 'Dashboard', path: '/dashboard', icon: '▦' },
-      { label: 'Reception / Gate', path: '/reception', icon: '🚪' },
-      { label: 'Customers & KYC', path: '/customers', icon: '👥' },
-      { label: 'Daily Badge & Sessions', path: '/daily-sessions', icon: '◈' },
-    ],
-  },
+  title: 'OPERATIONS',
+  items: [
+    { label: 'Dashboard', path: '/dashboard', icon: '▦' },
+    { label: 'Reception / Gate', path: '/reception', icon: '🚪' },
+    { label: 'Customers & KYC', path: '/customers', icon: '👥' },
+  ],
+},
   {
     title: 'CASH & CHIPS',
     items: [
