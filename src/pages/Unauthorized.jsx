@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import useAuth from '../hooks/useAuth'
+import { getDefaultRouteForRole } from '../utils/accessControl'
 
 const Unauthorized = () => {
   const navigate = useNavigate()
@@ -19,8 +20,8 @@ const Unauthorized = () => {
           <p className="text-sm font-medium text-gray-500">Current Role</p>
           <p className="mt-1 text-lg font-semibold text-gray-900">{user?.role || 'No Role'}</p>
         </div>
-        <Button className="mt-6" onClick={() => navigate('/dashboard')}>
-          Back to Dashboard
+        <Button className="mt-6" onClick={() => navigate(getDefaultRouteForRole(user?.role))}>
+          Back to My Home
         </Button>
       </Card>
     </div>

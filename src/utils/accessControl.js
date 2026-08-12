@@ -74,7 +74,7 @@ export function canAccessRoute(user, pathname) {
   const allowedRoles = getAllowedRolesForPath(pathname)
 
   if (!allowedRoles) {
-    return true
+    return false
   }
 
   return hasRole(user, allowedRoles)

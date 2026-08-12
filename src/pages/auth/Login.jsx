@@ -5,6 +5,7 @@ import useAuth from '../../hooks/useAuth'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import Card from '../../components/ui/Card'
+import { getDefaultRouteForRole } from '../../utils/accessControl'
 
 const testCredentials = [
   ['Admin', 'admin', 'admin123'],
@@ -21,7 +22,7 @@ const testCredentials = [
 
 const Login = () => {
   const navigate = useNavigate()
-  const { login, isAuthenticated, loading: authLoading } = useAuth()
+  const { user, login, isAuthenticated, loading: authLoading } = useAuth()
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const useMockAuth = import.meta.env.VITE_USE_MOCK_AUTH === 'true'
@@ -39,7 +40,7 @@ const Login = () => {
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    navigate('/dashboard', { replace: true })
+    navigate(getDefaultRouteForRole(user?.role), { replace: true })
     return null
   }
 
@@ -51,7 +52,7 @@ const Login = () => {
       const result = await login(data)
 
       if (result.success) {
-        navigate('/dashboard', { replace: true })
+        navigate(getDefaultRouteForRole(result.user?.role), { replace: true })
       } else {
         setError(result.error || 'Login failed. Please try again.')
       }

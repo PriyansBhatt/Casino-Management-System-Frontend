@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom'
+import useAuth from '../../hooks/useAuth'
+import { canAccessRoute } from '../../utils/accessControl'
 
 const sidebarSections = [
   {
@@ -44,6 +46,14 @@ const sidebarSections = [
 ]
 
 const Sidebar = () => {
+  const { user } = useAuth()
+  const visibleSections = sidebarSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => canAccessRoute(user, item.path)),
+    }))
+    .filter((section) => section.items.length > 0)
+
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-[280px] flex-col border-r border-slate-200 bg-white">
       <div className="flex h-[88px] shrink-0 items-center gap-3 border-b border-slate-200 px-4">
@@ -62,7 +72,7 @@ const Sidebar = () => {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-5">
-        {sidebarSections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title} className="mb-6">
             <p className="mb-3 px-3 text-xs font-extrabold uppercase tracking-[0.22em] text-slate-400">
               {section.title}
@@ -96,7 +106,7 @@ const Sidebar = () => {
             Current Role
           </p>
           <p className="mt-1 text-sm font-extrabold text-yellow-700">
-            SUPER_ADMIN
+            {user?.role || 'NO ROLE'}
           </p>
         </div>
 
