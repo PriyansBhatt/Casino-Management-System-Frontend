@@ -1,235 +1,973 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
-const summaryCards = [
-  {
-    label: 'Cash-Out Paid Today',
-    value: 'NPR 8,78,000',
-    icon: '💸',
-    border: 'border-emerald-200',
-  },
-  {
-    label: 'Losing Return Paid',
-    value: 'NPR 18,000',
-    icon: '🧾',
-    border: 'border-yellow-300',
-  },
-  {
-    label: 'Transport / Other Return',
-    value: 'NPR 12,000',
-    icon: '🚕',
-    border: 'border-sky-200',
-  },
-  {
-    label: 'Total Outflow Today',
-    value: 'NPR 9,08,000',
-    icon: '💰',
-    border: 'border-purple-200',
-  },
-  {
-    label: 'Pending Review',
-    value: '3',
-    icon: '👁',
-    border: 'border-amber-300',
-  },
-  {
-    label: 'Mismatch / Fraud Risk',
-    value: '1',
-    icon: '⚠',
-    border: 'border-red-300',
-  },
-]
-
-const customers = {
-  '051': {
-    initials: 'PT',
-    name: 'Priya Tamang',
-    cid: 'CID-1005',
-    category: 'VIP',
-    session: 'SES-2026-07-15-051',
-    totalBuyIn: 'NPR 4,00,000',
-    verifiedTableLoss: 'NPR 1,80,000',
-    verifiedMachineLoss: 'NPR 0',
-    totalVerifiedLoss: 'NPR 1,80,000',
-    unresolvedChips: 'NPR 40,000',
-    eligibleReturn: 'NPR 18,000',
-  },
-  '087': {
-    initials: 'RS',
-    name: 'Raj Sharma',
-    cid: 'CID-1001',
-    category: 'VIP',
-    session: 'SES-2026-07-15-087',
-    totalBuyIn: 'NPR 2,50,000',
-    verifiedWin: 'NPR 55,000',
-    verifiedLoss: 'NPR 0',
-    expectedRemainingChips: 'NPR 3,05,000',
-    unresolvedChips: 'NPR 0',
-  },
-  '026': {
-    initials: 'SR',
-    name: 'Suresh Rai',
-    cid: 'CID-1004',
-    category: 'Standard',
-    session: 'SES-2026-07-15-026',
-    totalBuyIn: 'NPR 60,000',
-    verifiedLoss: 'NPR 35,000',
-    totalCashOut: 'NPR 0',
-    unresolvedChips: 'NPR 0',
-  },
+const ACTIONS = {
+  LOSING_RETURN: 'LOSING_RETURN',
+  CASH_OUT: 'CASH_OUT',
+  TRANSPORT: 'TRANSPORT',
 }
 
-const outflowTransactions = [
+const BUSINESS_DATE = '2026-07-15'
+
+const initialTransactions = [
   {
     id: 'CO-2026-07-15-001',
+    businessDate: BUSINESS_DATE,
+    timestamp: '2026-07-15T18:42:00',
     time: '18:42',
     type: 'Cash-Out',
     badge: '087',
     customer: 'Raj Sharma',
-    base: 'Buy-In NPR 2,50,000',
-    paid: 'NPR 3,05,000',
+    basis: 'Buy-In NPR 2,50,000',
+    amount: '3,05,000',
     currency: 'NPR',
-    method: 'Cash',
-    status: 'Posted',
+    payment: 'Cash',
+    reference: '—',
   },
   {
     id: 'LR-2026-07-15-002',
+    businessDate: BUSINESS_DATE,
+    timestamp: '2026-07-15T19:11:00',
     time: '19:11',
     type: 'Losing Return',
     badge: '051',
     customer: 'Priya Tamang',
-    base: 'Verified Loss NPR 1,80,000',
-    paid: 'NPR 18,000',
+    basis: 'Verified Loss NPR 1,80,000',
+    amount: '18,000',
     currency: 'NPR',
-    method: 'Chips',
-    status: 'Mismatch Found',
+    payment: 'Chips',
+    reference: '—',
   },
   {
     id: 'TR-2026-07-15-003',
+    businessDate: BUSINESS_DATE,
+    timestamp: '2026-07-15T17:08:00',
     time: '17:08',
     type: 'Transport',
     badge: '026',
     customer: 'Suresh Rai',
-    base: 'Loss NPR 35,000',
-    paid: 'NPR 12,000',
+    basis: 'Transportation',
+    amount: '12,000',
     currency: 'NPR',
-    method: 'Cash',
-    status: 'Posted',
-  },
-  {
-    id: 'CO-2026-07-15-004',
-    time: '20:24',
-    type: 'Cash-Out',
-    badge: '112',
-    customer: 'Daniel Smith',
-    base: 'Buy-In NPR 15,00,000',
-    paid: 'INR 80,000',
-    currency: 'INR',
-    method: 'Bank',
-    status: 'Posted',
-  },
-  {
-    id: 'LR-2026-07-15-005',
-    time: '16:50',
-    type: 'Losing Return',
-    badge: '044',
-    customer: 'Amit Verma',
-    base: 'Verified Loss NPR 55,000',
-    paid: 'NPR 5,500',
-    currency: 'NPR',
-    method: 'Cash',
-    status: 'Auto Calculated',
+    payment: 'Cash',
+    reference: '—',
   },
 ]
 
-const inputClass =
-  'h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20'
+const LosingReturnPreview = () => {
+  const [activeAction, setActiveAction] = useState(ACTIONS.CASH_OUT)
+  const [transactions, setTransactions] = useState(initialTransactions)
+  const [feedback, setFeedback] = useState(null)
 
-const labelClass =
-  'mb-2 block text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500'
+  const showFeedback = (message, type = 'success') => {
+    setFeedback({ message, type })
+    window.setTimeout(() => setFeedback(null), 3000)
+  }
+
+  const postTransaction = (transaction) => {
+    const now = new Date()
+
+    setTransactions((current) => [
+      {
+        ...transaction,
+        id: `${transaction.prefix}-${BUSINESS_DATE}-${String(
+          current.length + 1,
+        ).padStart(3, '0')}`,
+        businessDate: BUSINESS_DATE,
+        timestamp: now.toISOString(),
+        time: now.toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }),
+        amount: formatNumber(transaction.amount),
+        reference: transaction.reference || '—',
+      },
+      ...current,
+    ])
+
+    showFeedback(`${transaction.type} posted successfully.`)
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <main className="space-y-5 p-4 sm:p-5 lg:p-6">
+        <header className="border-b border-slate-200 pb-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <span className="h-3 w-3 rotate-45 bg-amber-400" />
+
+                <h1 className="font-serif text-3xl font-black tracking-tight text-slate-950">
+                  Cash-Out & Return Control
+                </h1>
+              </div>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Verify customers, process payouts and manage customer return
+                claims.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+              Business Date: <strong>{BUSINESS_DATE}</strong> · Cashier:{' '}
+              <strong>Anil Cashier</strong>
+            </div>
+          </div>
+        </header>
+
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard
+            label="Cash-Out Paid Today"
+            value="NPR 3,05,000"
+            icon="💸"
+            tone="green"
+          />
+
+          <SummaryCard
+            label="Losing Return Paid"
+            value="NPR 23,500"
+            icon="🧾"
+            tone="amber"
+          />
+
+          <SummaryCard
+            label="Transport / Other Return"
+            value="NPR 12,000"
+            icon="🚕"
+            tone="blue"
+          />
+
+          <SummaryCard
+            label="Total Outflow Today"
+            value="NPR 3,40,500"
+            icon="💰"
+            tone="purple"
+          />
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+          <div className="grid gap-2 md:grid-cols-3">
+            <ActionTab
+              active={activeAction === ACTIONS.LOSING_RETURN}
+              icon="↩"
+              title="Losing Return Claim"
+              description="Verified loss return processing"
+              tone="red"
+              onClick={() => setActiveAction(ACTIONS.LOSING_RETURN)}
+            />
+
+            <ActionTab
+              active={activeAction === ACTIONS.CASH_OUT}
+              icon="💰"
+              title="Cash-Out / Win Payment"
+              description="Customer chip and wallet payout"
+              tone="green"
+              onClick={() => setActiveAction(ACTIONS.CASH_OUT)}
+            />
+
+            <ActionTab
+              active={activeAction === ACTIONS.TRANSPORT}
+              icon="🚕"
+              title="Transportation / Other Claim"
+              description="Transport and approved service returns"
+              tone="blue"
+              onClick={() => setActiveAction(ACTIONS.TRANSPORT)}
+            />
+          </div>
+        </section>
+
+        {feedback && (
+          <div
+            className={`rounded-xl border px-4 py-3 text-sm font-bold ${
+              feedback.type === 'error'
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            {feedback.message}
+          </div>
+        )}
+
+        <section>
+          {activeAction === ACTIONS.LOSING_RETURN && (
+            <LosingReturnForm
+              onPost={postTransaction}
+              onError={(message) => showFeedback(message, 'error')}
+            />
+          )}
+
+          {activeAction === ACTIONS.CASH_OUT && (
+            <CashOutForm
+              onPost={postTransaction}
+              onError={(message) => showFeedback(message, 'error')}
+            />
+          )}
+
+          {activeAction === ACTIONS.TRANSPORT && (
+            <TransportClaimForm
+              onPost={postTransaction}
+              onError={(message) => showFeedback(message, 'error')}
+            />
+          )}
+        </section>
+
+        <TransactionsSection transactions={transactions} />
+      </main>
+    </div>
+  )
+}
+
+const ActionTab = ({
+  active,
+  icon,
+  title,
+  description,
+  tone,
+  onClick,
+}) => {
+  const tones = {
+    red: active
+      ? 'border-red-300 bg-red-50 text-red-700 shadow-sm'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:bg-red-50/50',
+
+    green: active
+      ? 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/50',
+
+    blue: active
+      ? 'border-sky-300 bg-sky-50 text-sky-700 shadow-sm'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:bg-sky-50/50',
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-[78px] items-center gap-4 rounded-xl border px-5 py-4 text-left transition ${tones[tone]}`}
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl shadow-sm">
+        {icon}
+      </span>
+
+      <span>
+        <span className="block text-sm font-black">{title}</span>
+
+        <span className="mt-1 block text-xs text-slate-500">
+          {description}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+const LosingReturnForm = ({ onPost, onError }) => {
+  const [customerQuery, setCustomerQuery] = useState('051')
+  const [verified, setVerified] = useState(false)
+  const [claimedLoss, setClaimedLoss] = useState('180000')
+  const [currency, setCurrency] = useState('NPR')
+  const [paymentMode, setPaymentMode] = useState('CHIPS')
+  const [remarks, setRemarks] = useState('')
+
+  const eligibleReturn = verified
+    ? Math.round(Number(claimedLoss || 0) * 0.1)
+    : 0
+
+  const postLosingReturn = () => {
+    const numericLoss = Number(claimedLoss)
+
+    if (!verified) {
+      onError('Verify the customer before posting a losing return.')
+      return
+    }
+
+    if (!Number.isFinite(numericLoss) || numericLoss <= 0 || eligibleReturn <= 0) {
+      onError('Enter a valid claimed loss greater than zero.')
+      return
+    }
+
+    onPost({
+      prefix: 'LR',
+      type: 'Losing Return',
+      badge: '051',
+      customer: 'Priya Tamang',
+      basis: `Verified Loss NPR ${formatNumber(numericLoss)}`,
+      amount: eligibleReturn,
+      currency,
+      payment: paymentMode === 'CHIPS' ? 'Chips' : 'Cash',
+      reference: '',
+      remarks: remarks.trim(),
+    })
+
+    setClaimedLoss('')
+    setRemarks('')
+    setVerified(false)
+  }
+
+  return (
+    <FormShell
+      title="Losing Return Claim"
+      description="Verify the customer and calculate the eligible losing return from verified net loss."
+      tone="red"
+    >
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-4">
+          <VerificationField
+            value={customerQuery}
+            onChange={setCustomerQuery}
+            onVerify={() => setVerified(Boolean(customerQuery.trim()))}
+          />
+
+          {verified ? (
+            <VerifiedCustomerCard
+              name="Priya Tamang"
+              cid="CID-1005"
+              badge="051"
+              category="VIP"
+            />
+          ) : (
+            <VerificationPlaceholder />
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <InfoRow label="Total Buy-In" value={verified ? 'NPR 4,00,000' : '—'} />
+            <InfoRow
+              label="Verified Table Loss"
+              value={verified ? 'NPR 1,80,000' : '—'}
+            />
+            <InfoRow
+              label="Verified Machine Loss"
+              value={verified ? 'NPR 0' : '—'}
+            />
+            <InfoRow
+              label="Total Verified Loss"
+              value={verified ? 'NPR 1,80,000' : '—'}
+              strong
+            />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Claimed Loss">
+              <input
+                type="number"
+                min="0"
+                value={claimedLoss}
+                onChange={(event) => setClaimedLoss(event.target.value)}
+                className="form-input"
+              />
+            </Field>
+
+            <ReadOnlyValue
+              label="System Eligible Return 10%"
+              value={`NPR ${formatNumber(eligibleReturn)}`}
+            />
+          </div>
+
+          <ToggleGroup
+            label="Payment Currency"
+            value={currency}
+            options={['NPR', 'INR']}
+            onChange={setCurrency}
+          />
+
+          <ToggleGroup
+            label="Payment Mode"
+            value={paymentMode}
+            options={['CASH', 'CHIPS']}
+            onChange={setPaymentMode}
+          />
+
+          {paymentMode === 'CHIPS' && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
+              A return paid in chips may be reused for play, but it is excluded
+              from future losing-return calculations.
+            </div>
+          )}
+
+          <Field label="Remarks">
+            <textarea
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+              rows={4}
+              placeholder="Reason or cashier note"
+              className="form-input resize-none"
+            />
+          </Field>
+
+          <button
+            type="button"
+            onClick={postLosingReturn}
+            className="h-12 w-full rounded-xl bg-amber-400 text-sm font-black text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            Post Losing Return
+          </button>
+        </div>
+      </div>
+    </FormShell>
+  )
+}
+
+const CashOutForm = ({ onPost, onError }) => {
+  const denominations = [500, 1000, 5000, 10000, 25000]
+  const [customerQuery, setCustomerQuery] = useState('087')
+  const [verified, setVerified] = useState(false)
+  const [quantities, setQuantities] = useState({
+    500: 0,
+    1000: 5,
+    5000: 20,
+    10000: 10,
+    25000: 4,
+  })
+  const [currency, setCurrency] = useState('NPR')
+  const [paymentMethod, setPaymentMethod] = useState('CASH')
+  const [reference, setReference] = useState('')
+  const [remarks, setRemarks] = useState('')
+
+  const returnedTotal = useMemo(
+    () =>
+      denominations.reduce(
+        (total, denomination) =>
+          total + denomination * Number(quantities[denomination] || 0),
+        0,
+      ),
+    [quantities],
+  )
+
+  const changeQuantity = (denomination, change) => {
+    setQuantities((current) => ({
+      ...current,
+      [denomination]: Math.max(
+        0,
+        Number(current[denomination] || 0) + change,
+      ),
+    }))
+  }
+
+  const referenceRequired = paymentMethod !== 'CASH'
+
+  const postCashOut = () => {
+    if (!verified) {
+      onError('Verify the customer before posting a cash-out.')
+      return
+    }
+
+    if (returnedTotal <= 0) {
+      onError('Enter at least one returned chip denomination.')
+      return
+    }
+
+    if (referenceRequired && !reference.trim()) {
+      onError(`Reference is required for ${paymentMethod}.`)
+      return
+    }
+
+    onPost({
+      prefix: 'CO',
+      type: 'Cash-Out',
+      badge: '087',
+      customer: 'Raj Sharma',
+      basis: 'Buy-In NPR 2,50,000',
+      amount: returnedTotal,
+      currency,
+      payment: paymentMethod,
+      reference: reference.trim(),
+      remarks: remarks.trim(),
+    })
+
+    setQuantities({ 500: 0, 1000: 0, 5000: 0, 10000: 0, 25000: 0 })
+    setReference('')
+    setRemarks('')
+    setVerified(false)
+  }
+
+  return (
+    <FormShell
+      title="Cash-Out / Win Payment"
+      description="Verify the customer and process returned chips or wallet cash-out."
+      tone="green"
+    >
+      <div className="grid gap-5 xl:grid-cols-[1fr_1.15fr]">
+        <div className="space-y-4">
+          <VerificationField
+            value={customerQuery}
+            onChange={setCustomerQuery}
+            onVerify={() => setVerified(Boolean(customerQuery.trim()))}
+          />
+
+          {verified ? (
+            <VerifiedCustomerCard
+              name="Raj Sharma"
+              cid="CID-1001"
+              badge="087"
+              category="VIP"
+            />
+          ) : (
+            <VerificationPlaceholder />
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <InfoRow label="Total Buy-In" value={verified ? 'NPR 2,50,000' : '—'} />
+            <InfoRow label="Verified Win" value={verified ? 'NPR 55,000' : '—'} />
+            <InfoRow label="Verified Loss" value={verified ? 'NPR 0' : '—'} />
+            <InfoRow
+              label="Expected Remaining Chips"
+              value={verified ? 'NPR 3,05,000' : '—'}
+              success
+              strong
+            />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+              Returned Chips Denomination Wise
+            </p>
+
+            <div className="grid gap-2 sm:grid-cols-5">
+              {denominations.map((denomination) => (
+                <DenominationInput
+                  key={denomination}
+                  denomination={denomination}
+                  quantity={quantities[denomination]}
+                  onDecrease={() => changeQuantity(denomination, -1)}
+                  onIncrease={() => changeQuantity(denomination, 1)}
+                  onChange={(value) =>
+                    setQuantities((current) => ({
+                      ...current,
+                      [denomination]: Math.max(0, Number(value) || 0),
+                    }))
+                  }
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+            <span className="text-sm font-bold text-slate-600">
+              Returned Chips Total
+            </span>
+
+            <span className="text-xl font-black text-emerald-700">
+              NPR {formatNumber(returnedTotal)}
+            </span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ToggleGroup
+              label="Payment Currency"
+              value={currency}
+              options={['NPR', 'INR']}
+              onChange={setCurrency}
+            />
+
+            <ToggleGroup
+              label="Payment Method"
+              value={paymentMethod}
+              options={['CASH', 'BANK', 'QR', 'CARD']}
+              onChange={setPaymentMethod}
+            />
+          </div>
+
+          <Field
+            label={`Reference ID${referenceRequired ? ' *' : ''}`}
+          >
+            <input
+              type="text"
+              value={reference}
+              disabled={!referenceRequired}
+              onChange={(event) => setReference(event.target.value)}
+              placeholder={
+                referenceRequired
+                  ? 'Enter transaction reference'
+                  : 'Optional for cash payment'
+              }
+              className="form-input disabled:bg-slate-100 disabled:text-slate-400"
+            />
+          </Field>
+
+          <Field label="Remarks">
+            <textarea
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+              rows={3}
+              placeholder="Optional remarks"
+              className="form-input resize-none"
+            />
+          </Field>
+
+          <button
+            type="button"
+            onClick={postCashOut}
+            className="h-12 w-full rounded-xl bg-amber-400 text-sm font-black text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            Post Cash-Out
+          </button>
+        </div>
+      </div>
+    </FormShell>
+  )
+}
+
+const TransportClaimForm = ({ onPost, onError }) => {
+  const [customerQuery, setCustomerQuery] = useState('026')
+  const [verified, setVerified] = useState(false)
+  const [claimType, setClaimType] = useState('Transportation')
+  const [amount, setAmount] = useState('12000')
+  const [currency, setCurrency] = useState('NPR')
+  const [paymentMethod, setPaymentMethod] = useState('CASH')
+  const [reference, setReference] = useState('')
+  const [remarks, setRemarks] = useState(
+    'Late-night customer transport return',
+  )
+
+  const referenceRequired = paymentMethod !== 'CASH'
+
+  const postClaim = () => {
+    const numericAmount = Number(amount)
+
+    if (!verified) {
+      onError('Verify the customer before posting a claim.')
+      return
+    }
+
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      onError('Enter a valid claim amount greater than zero.')
+      return
+    }
+
+    if (referenceRequired && !reference.trim()) {
+      onError(`Reference is required for ${paymentMethod}.`)
+      return
+    }
+
+    onPost({
+      prefix: 'TR',
+      type: claimType,
+      badge: '026',
+      customer: 'Suresh Rai',
+      basis: claimType,
+      amount: numericAmount,
+      currency,
+      payment: paymentMethod,
+      reference: reference.trim(),
+      remarks: remarks.trim(),
+    })
+
+    setAmount('')
+    setReference('')
+    setRemarks('')
+    setVerified(false)
+  }
+
+  return (
+    <FormShell
+      title="Transportation / Other Claim"
+      description="Process transportation, hotel, food, gift, emergency or other approved returns."
+      tone="blue"
+    >
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <div className="space-y-4">
+          <VerificationField
+            value={customerQuery}
+            onChange={setCustomerQuery}
+            onVerify={() => setVerified(Boolean(customerQuery.trim()))}
+          />
+
+          {verified ? (
+            <VerifiedCustomerCard
+              name="Suresh Rai"
+              cid="CID-1004"
+              badge="026"
+              category="Standard"
+            />
+          ) : (
+            <VerificationPlaceholder />
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <InfoRow label="Total Buy-In" value={verified ? 'NPR 60,000' : '—'} />
+            <InfoRow
+              label="Total Verified Loss"
+              value={verified ? 'NPR 35,000' : '—'}
+            />
+            <InfoRow label="Total Cash-Out" value={verified ? 'NPR 0' : '—'} />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Claim Type">
+              <select
+                value={claimType}
+                onChange={(event) => setClaimType(event.target.value)}
+                className="form-input"
+              >
+                <option>Transportation</option>
+                <option>Hotel</option>
+                <option>Food</option>
+                <option>Gift</option>
+                <option>Emergency</option>
+                <option>Medical</option>
+                <option>Other</option>
+              </select>
+            </Field>
+
+            <Field label="Claim Amount">
+              <input
+                type="number"
+                min="0"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                className="form-input"
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ToggleGroup
+              label="Payment Currency"
+              value={currency}
+              options={['NPR', 'INR']}
+              onChange={setCurrency}
+            />
+
+            <ToggleGroup
+              label="Payment Method"
+              value={paymentMethod}
+              options={['CASH', 'BANK', 'QR', 'CARD']}
+              onChange={setPaymentMethod}
+            />
+          </div>
+
+          <Field
+            label={`Reference ID${referenceRequired ? ' *' : ''}`}
+          >
+            <input
+              type="text"
+              value={reference}
+              disabled={!referenceRequired}
+              onChange={(event) => setReference(event.target.value)}
+              placeholder={
+                referenceRequired
+                  ? 'Enter transaction reference'
+                  : 'Optional for cash payment'
+              }
+              className="form-input disabled:bg-slate-100 disabled:text-slate-400"
+            />
+          </Field>
+
+          <ReadOnlyValue label="Issued By" value="Anil Cashier" />
+
+          <Field label="Reason / Remarks">
+            <textarea
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+              rows={4}
+              className="form-input resize-none"
+            />
+          </Field>
+
+          <button
+            type="button"
+            onClick={postClaim}
+            className="h-12 w-full rounded-xl bg-amber-400 text-sm font-black text-slate-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            Post Claim
+          </button>
+        </div>
+      </div>
+    </FormShell>
+  )
+}
+
+const FormShell = ({ title, description, tone, children }) => {
+  const tones = {
+    red: 'border-red-200 text-red-700',
+    green: 'border-emerald-200 text-emerald-700',
+    blue: 'border-sky-200 text-sky-700',
+  }
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className={`border-b px-5 py-4 ${tones[tone]}`}>
+        <h2 className="text-sm font-black uppercase tracking-[0.17em]">
+          {title}
+        </h2>
+
+        <p className="mt-1 text-xs normal-case tracking-normal text-slate-500">
+          {description}
+        </p>
+      </div>
+
+      <div className="p-5">{children}</div>
+    </section>
+  )
+}
+
+const VerificationField = ({ value, onChange, onVerify }) => (
+  <div>
+    <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+      Badge / CID / Customer Name
+    </p>
+
+    <div className="flex gap-2">
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="form-input"
+        placeholder="Enter badge, CID or customer"
+      />
+
+      <button
+        type="button"
+        onClick={onVerify}
+        className="shrink-0 rounded-xl bg-amber-400 px-5 text-sm font-black text-slate-950 hover:bg-amber-300"
+      >
+        Verify
+      </button>
+    </div>
+  </div>
+)
+
+const VerifiedCustomerCard = ({ name, cid, badge, category }) => (
+  <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-sm font-black text-amber-700">
+      {name
+        .split(' ')
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join('')}
+    </span>
+
+    <div className="min-w-0 flex-1">
+      <p className="font-black text-slate-950">{name}</p>
+
+      <p className="mt-1 text-xs text-slate-500">
+        {cid} · Badge {badge} · {category}
+      </p>
+    </div>
+
+    <span className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700">
+      VERIFIED
+    </span>
+  </div>
+)
+
+const VerificationPlaceholder = () => (
+  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+    Verify badge, CID or customer name to fetch the active customer session.
+  </div>
+)
+
+const DenominationInput = ({
+  denomination,
+  quantity,
+  onDecrease,
+  onIncrease,
+  onChange,
+}) => (
+  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+      NPR
+    </p>
+
+    <p className="text-sm font-black text-slate-900">
+      {formatNumber(denomination)}
+    </p>
+
+    <div className="mt-3 flex items-center gap-1">
+      <button
+        type="button"
+        onClick={onDecrease}
+        className="h-8 w-8 rounded-lg border border-slate-200 bg-white font-black"
+      >
+        −
+      </button>
+
+      <input
+        type="number"
+        min="0"
+        value={quantity}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white text-center text-sm font-black outline-none"
+      />
+
+      <button
+        type="button"
+        onClick={onIncrease}
+        className="h-8 w-8 rounded-lg border border-slate-200 bg-white font-black"
+      >
+        +
+      </button>
+    </div>
+
+    <p className="mt-2 text-center text-xs font-semibold text-slate-500">
+      {formatNumber(denomination * quantity)}
+    </p>
+  </div>
+)
+
+const ToggleGroup = ({ label, value, options, onChange }) => (
+  <div>
+    <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+      {label}
+    </p>
+
+    <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={`min-h-9 rounded-lg px-2 text-xs font-black transition ${
+            value === option
+              ? 'bg-amber-400 text-slate-950 shadow-sm'
+              : 'text-slate-500 hover:bg-white'
+          }`}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  </div>
+)
 
 const Field = ({ label, children }) => (
   <label className="block">
-    <span className={labelClass}>{label}</span>
+    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+      {label}
+    </span>
+
     {children}
   </label>
 )
 
-const CurrencyToggle = ({ value, onChange }) => (
-  <div className="grid grid-cols-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
-    {['NPR', 'INR'].map((currency) => (
-      <button
-        key={currency}
-        type="button"
-        onClick={() => onChange(currency)}
-        className={`rounded-md px-3 py-2 text-sm font-extrabold ${
-          value === currency
-            ? 'bg-yellow-400 text-slate-950'
-            : 'text-slate-500 hover:bg-white'
-        }`}
-      >
-        {currency}
-      </button>
-    ))}
+const ReadOnlyValue = ({ label, value }) => (
+  <div>
+    <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+      {label}
+    </p>
+
+    <div className="flex min-h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-900">
+      {value}
+    </div>
   </div>
 )
 
-const PaymentMethodToggle = ({ value, onChange, includeChips = false }) => {
-  const methods = includeChips ? ['Cash', 'Chips'] : ['Cash', 'Bank', 'QR', 'Card']
+const InfoRow = ({ label, value, success, strong }) => (
+  <div className="flex items-center justify-between gap-4 border-b border-slate-200 py-2 last:border-b-0">
+    <span className="text-sm text-slate-500">{label}</span>
 
-  return (
-    <div className={`grid rounded-lg border border-slate-200 bg-slate-50 p-1 ${includeChips ? 'grid-cols-2' : 'grid-cols-4'}`}>
-      {methods.map((method) => (
-        <button
-          key={method}
-          type="button"
-          onClick={() => onChange(method)}
-          className={`rounded-md px-3 py-2 text-sm font-extrabold ${
-            value === method
-              ? 'bg-yellow-400 text-slate-950'
-              : 'text-slate-500 hover:bg-white'
-          }`}
-        >
-          {method}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-const CustomerPreview = ({ customer }) => {
-  if (!customer) {
-    return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-sm font-medium text-slate-500">
-        Verify badge/CID to fetch customer session
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-yellow-100 text-sm font-bold text-yellow-700">
-          {customer.initials}
-        </div>
-        <div>
-          <p className="font-bold text-slate-950">
-            {customer.name} · {customer.cid}
-          </p>
-          <p className="text-xs text-slate-500">
-            {customer.category} · Session {customer.session}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const Row = ({ label, value, danger = false, success = false }) => (
-  <div className="flex items-center justify-between gap-4 text-sm">
-    <span className="font-medium text-slate-500">{label}</span>
     <span
-      className={`font-extrabold ${
-        danger ? 'text-red-600' : success ? 'text-emerald-600' : 'text-slate-900'
+      className={`text-sm ${
+        success
+          ? 'font-black text-emerald-700'
+          : strong
+            ? 'font-black text-slate-950'
+            : 'font-bold text-slate-800'
       }`}
     >
       {value}
@@ -237,403 +975,126 @@ const Row = ({ label, value, danger = false, success = false }) => (
   </div>
 )
 
-const DenominationGrid = () => (
-  <div className="grid grid-cols-5 gap-2">
-    {[
-      { chip: '500', qty: '0', total: '0' },
-      { chip: '1000', qty: '5', total: '5,000' },
-      { chip: '5000', qty: '20', total: '1,00,000' },
-      { chip: '10000', qty: '10', total: '1,00,000' },
-      { chip: '25000', qty: '4', total: '1,00,000' },
-    ].map((item) => (
-      <div key={item.chip} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-center">
-        <p className="text-[10px] font-bold text-slate-500">NPR</p>
-        <p className="text-xs font-bold text-slate-700">{item.chip}</p>
-        <input
-          className="mt-2 h-8 w-full rounded-md border border-slate-200 bg-white text-center text-sm outline-none focus:border-yellow-400"
-          defaultValue={item.qty}
-        />
-        <p className="mt-1 text-xs font-bold text-slate-500">{item.total}</p>
-      </div>
-    ))}
-  </div>
-)
-
-const CashOutReturnControl = () => {
-  const [losingBadge, setLosingBadge] = useState('051')
-  const [cashOutBadge, setCashOutBadge] = useState('087')
-  const [claimBadge, setClaimBadge] = useState('026')
-
-  const [losingCurrency, setLosingCurrency] = useState('NPR')
-  const [cashOutCurrency, setCashOutCurrency] = useState('NPR')
-  const [claimCurrency, setClaimCurrency] = useState('NPR')
-
-  const [losingMethod, setLosingMethod] = useState('Chips')
-  const [cashOutMethod, setCashOutMethod] = useState('Cash')
-  const [claimMethod, setClaimMethod] = useState('Cash')
-
-  const losingCustomer = customers[losingBadge]
-  const cashOutCustomer = customers[cashOutBadge]
-  const claimCustomer = customers[claimBadge]
+const SummaryCard = ({ label, value, icon, tone }) => {
+  const tones = {
+    green: 'border-emerald-200 from-white to-emerald-50',
+    amber: 'border-amber-200 from-white to-amber-50',
+    blue: 'border-sky-200 from-white to-sky-50',
+    purple: 'border-violet-200 from-white to-violet-50',
+  }
 
   return (
-    <div className="space-y-6 text-slate-900">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="font-serif text-3xl font-bold tracking-tight text-slate-950">
-            <span className="mr-2 text-yellow-500">◆</span>
-            Cash-Out & Return Control
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Customer cash-out, losing return, transportation claim, verified wallet balance, and suspicious payout control.
-          </p>
-        </div>
+    <div
+      className={`rounded-2xl border bg-gradient-to-br p-4 shadow-sm ${
+        tones[tone]
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+          {label}
+        </p>
 
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span className="font-extrabold">Control rule:</span> Mismatch cases must create review case with audit log.
-        </div>
+        <span>{icon}</span>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        {summaryCards.map((card) => (
-          <div key={card.label} className={`rounded-2xl border ${card.border} bg-white p-5 shadow-sm`}>
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                {card.label}
-              </p>
-              <span className="text-lg">{card.icon}</span>
-            </div>
-            <p className="mt-4 font-serif text-2xl font-bold text-slate-950">{card.value}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-3">
-        <div className="rounded-2xl border border-red-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-red-700">
-              ↩ Losing Return Claim
-            </h2>
-          </div>
-
-          <div className="space-y-4 p-5">
-            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-              <Field label="Badge / CID">
-                <input
-                  className={inputClass}
-                  value={losingBadge}
-                  onChange={(event) => setLosingBadge(event.target.value)}
-                />
-              </Field>
-              <div className="flex items-end">
-                <button className="h-11 rounded-lg bg-yellow-400 px-5 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">
-                  Verify
-                </button>
-              </div>
-            </div>
-
-            <CustomerPreview customer={losingCustomer} />
-
-            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <Row label="Total Buy-In" value={losingCustomer?.totalBuyIn || '—'} />
-              <Row label="Verified Table Loss" value={losingCustomer?.verifiedTableLoss || '—'} />
-              <Row label="Verified Machine Loss" value={losingCustomer?.verifiedMachineLoss || '—'} />
-              <Row label="Total Verified Loss" value={losingCustomer?.totalVerifiedLoss || '—'} />
-              <Row label="Unresolved Chips" value={losingCustomer?.unresolvedChips || '—'} danger />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Claimed Loss">
-                <input className={inputClass} defaultValue="NPR 2,20,000" />
-              </Field>
-              <Field label="System Eligible Return 10%">
-                <input className={inputClass} value={losingCustomer?.eligibleReturn || 'NPR 0'} readOnly />
-              </Field>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Payment Currency">
-                <CurrencyToggle value={losingCurrency} onChange={setLosingCurrency} />
-              </Field>
-              <Field label="Payment Mode">
-                <PaymentMethodToggle value={losingMethod} onChange={setLosingMethod} includeChips />
-              </Field>
-            </div>
-
-            <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-700">
-              Return paid in chips can be used again for play but is not eligible for another losing return.
-            </div>
-
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <span className="font-extrabold">Mismatch detected:</span> claimed loss exceeds verified loss; unresolved chip exposure exists.
-            </div>
-
-            <Field label="Remarks">
-              <input className={inputClass} placeholder="Reason / supervisor note" />
-            </Field>
-
-            <button className="w-full rounded-lg bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">
-              Post Losing Return
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-emerald-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-emerald-700">
-              💰 Cash-Out / Win Payment
-            </h2>
-          </div>
-
-          <div className="space-y-4 p-5">
-            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-              <Field label="Badge / CID">
-                <input
-                  className={inputClass}
-                  value={cashOutBadge}
-                  onChange={(event) => setCashOutBadge(event.target.value)}
-                />
-              </Field>
-              <div className="flex items-end">
-                <button className="h-11 rounded-lg bg-yellow-400 px-5 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">
-                  Verify
-                </button>
-              </div>
-            </div>
-
-            <CustomerPreview customer={cashOutCustomer} />
-
-            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <Row label="Total Buy-In" value={cashOutCustomer?.totalBuyIn || '—'} />
-              <Row label="Verified Win" value={cashOutCustomer?.verifiedWin || '—'} />
-              <Row label="Verified Loss" value={cashOutCustomer?.verifiedLoss || '—'} />
-              <Row label="Expected Remaining Chips" value={cashOutCustomer?.expectedRemainingChips || '—'} success />
-              <Row label="Unresolved Chips" value={cashOutCustomer?.unresolvedChips || '—'} />
-            </div>
-
-            <Field label="Returned Chips Denomination Wise">
-              <DenominationGrid />
-            </Field>
-
-            <Row label="Returned Chips Total" value="NPR 3,05,000" success />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Payment Currency">
-                <CurrencyToggle value={cashOutCurrency} onChange={setCashOutCurrency} />
-              </Field>
-              <Field label="Payment Method">
-                <PaymentMethodToggle value={cashOutMethod} onChange={setCashOutMethod} />
-              </Field>
-            </div>
-
-            <Field label="Reference ID">
-              <input className={inputClass} placeholder="Required for QR, Card, Bank" />
-            </Field>
-
-            <Field label="Same Customer Verified?">
-              <select className={inputClass} defaultValue="Yes">
-                <option>Yes</option>
-                <option>No</option>
-              </select>
-            </Field>
-
-            <Field label="Remarks">
-              <input className={inputClass} placeholder="Optional remarks" />
-            </Field>
-
-            <button className="w-full rounded-lg bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">
-              Post Cash-Out
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-sky-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-sky-700">
-              🚕 Transportation / Other Claim
-            </h2>
-          </div>
-
-          <div className="space-y-4 p-5">
-            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-              <Field label="Badge / CID">
-                <input
-                  className={inputClass}
-                  value={claimBadge}
-                  onChange={(event) => setClaimBadge(event.target.value)}
-                />
-              </Field>
-              <div className="flex items-end">
-                <button className="h-11 rounded-lg bg-yellow-400 px-5 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">
-                  Verify
-                </button>
-              </div>
-            </div>
-
-            <CustomerPreview customer={claimCustomer} />
-
-            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <Row label="Total Buy-In" value={claimCustomer?.totalBuyIn || '—'} />
-              <Row label="Total Verified Loss" value={claimCustomer?.verifiedLoss || '—'} />
-              <Row label="Total Cash-Out" value={claimCustomer?.totalCashOut || '—'} />
-              <Row label="Unresolved Chips" value={claimCustomer?.unresolvedChips || '—'} />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Claim Type">
-                <select className={inputClass}>
-                  <option>Transportation</option>
-                  <option>Food / Service Return</option>
-                  <option>Hotel Adjustment</option>
-                  <option>Other Approved Claim</option>
-                </select>
-              </Field>
-
-              <Field label="Claim Amount">
-                <input className={inputClass} defaultValue="NPR 12,000" />
-              </Field>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Payment Currency">
-                <CurrencyToggle value={claimCurrency} onChange={setClaimCurrency} />
-              </Field>
-              <Field label="Payment Method">
-                <PaymentMethodToggle value={claimMethod} onChange={setClaimMethod} />
-              </Field>
-            </div>
-
-            <Field label="Reference ID">
-              <input className={inputClass} placeholder="Required for QR, Card, Bank" />
-            </Field>
-
-            <Field label="Issued By">
-              <input className={inputClass} defaultValue="Anil Cashier" readOnly />
-            </Field>
-
-            <Field label="Reason / Remarks">
-              <textarea
-                className="min-h-[84px] w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
-                defaultValue="Late-night customer transport return"
-              />
-            </Field>
-
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              No mandatory approval required.
-            </div>
-
-            <button className="w-full rounded-lg bg-yellow-400 px-5 py-3 text-sm font-extrabold text-slate-950 hover:bg-yellow-300">
-              Post Claim
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <h2 className="text-sm font-extrabold uppercase tracking-[0.16em] text-slate-700">
-            Today’s Outflow Transactions
-          </h2>
-
-          <div className="flex flex-wrap gap-2">
-            <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              Filter
-            </button>
-            <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
-              Excel
-            </button>
-            <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50">
-              PDF
-            </button>
-            <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              Print
-            </button>
-          </div>
-        </div>
-
-        <div className="border-b border-slate-200 px-4 pt-4">
-          <div className="flex flex-wrap gap-2">
-            {['Cash-Outs', 'Losing Returns', 'Transport / Other', 'Mismatch / Review', 'All Outflows'].map((tab, index) => (
-              <button
-                key={tab}
-                className={`rounded-t-lg px-4 py-3 text-sm font-extrabold ${
-                  index === 0
-                    ? 'border-b-2 border-yellow-400 bg-yellow-50 text-yellow-700'
-                    : 'text-slate-500 hover:bg-slate-50'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-[0.14em] text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Transaction ID</th>
-                <th className="px-4 py-3">Time</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Badge</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Buy-In / Loss</th>
-                <th className="px-4 py-3">Paid Amount</th>
-                <th className="px-4 py-3">Currency</th>
-                <th className="px-4 py-3">Payment Method</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {outflowTransactions.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-4 font-mono text-xs font-bold text-slate-700">{row.id}</td>
-                  <td className="px-4 py-4 text-slate-700">{row.time}</td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`rounded-lg border px-3 py-1 text-xs font-bold ${
-                        row.type === 'Cash-Out'
-                          ? 'border-sky-200 bg-sky-50 text-sky-700'
-                          : row.type === 'Losing Return'
-                            ? 'border-amber-200 bg-amber-50 text-amber-700'
-                            : 'border-purple-200 bg-purple-50 text-purple-700'
-                      }`}
-                    >
-                      {row.type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-1 font-mono text-sm font-bold text-yellow-700">
-                      {row.badge}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 font-bold text-slate-950">{row.customer}</td>
-                  <td className="px-4 py-4 text-slate-700">{row.base}</td>
-                  <td className="px-4 py-4 font-bold text-slate-950">{row.paid}</td>
-                  <td className="px-4 py-4 text-slate-700">{row.currency}</td>
-                  <td className="px-4 py-4 text-slate-700">{row.method}</td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`rounded-lg border px-3 py-1 text-xs font-bold uppercase ${
-                        row.status === 'Mismatch Found'
-                          ? 'border-red-200 bg-red-50 text-red-700'
-                          : row.status === 'Auto Calculated'
-                            ? 'border-sky-200 bg-sky-50 text-sky-700'
-                            : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      }`}
-                    >
-                      {row.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <p className="mt-5 font-serif text-2xl font-black text-slate-950">
+        {value}
+      </p>
     </div>
   )
 }
 
-export default CashOutReturnControl
+const TransactionsSection = ({ transactions }) => (
+  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="border-b border-slate-200 px-5 py-4">
+      <h2 className="text-sm font-black uppercase tracking-[0.17em] text-slate-700">
+        Today&apos;s Outflow Transactions
+      </h2>
+
+      <p className="mt-1 text-xs text-slate-500">
+        Newly posted records appear here immediately.
+      </p>
+    </div>
+
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[1000px]">
+        <thead className="bg-slate-50">
+          <tr>
+            {[
+              'Transaction ID',
+              'Time',
+              'Type',
+              'Badge',
+              'Customer',
+              'Basis',
+              'Paid Amount',
+              'Currency',
+              'Payment',
+              'Reference',
+              'Status',
+            ].map((heading) => (
+              <th
+                key={heading}
+                className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.15em] text-slate-500"
+              >
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {transactions.map((transaction) => (
+            <TransactionRow key={transaction.id} {...transaction} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+)
+
+const TransactionRow = ({
+  id,
+  time,
+  type,
+  badge,
+  customer,
+  basis,
+  amount,
+  currency,
+  payment,
+  reference,
+}) => (
+  <tr className="border-t border-slate-100 hover:bg-slate-50">
+    <td className="px-4 py-4 font-mono text-xs font-black text-slate-700">
+      {id}
+    </td>
+    <td className="px-4 py-4 text-sm text-slate-600">{time}</td>
+    <td className="px-4 py-4 text-sm font-bold text-slate-700">{type}</td>
+    <td className="px-4 py-4">
+      <span className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 font-mono text-xs font-black text-amber-700">
+        {badge}
+      </span>
+    </td>
+    <td className="px-4 py-4 text-sm font-black text-slate-900">
+      {customer}
+    </td>
+    <td className="px-4 py-4 text-sm text-slate-600">{basis}</td>
+    <td className="px-4 py-4 text-sm font-black text-slate-900">
+      {amount}
+    </td>
+    <td className="px-4 py-4 text-sm text-slate-600">{currency}</td>
+    <td className="px-4 py-4 text-sm text-slate-600">{payment}</td>
+    <td className="px-4 py-4 text-sm text-slate-600">{reference}</td>
+    <td className="px-4 py-4">
+      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
+        POSTED
+      </span>
+    </td>
+  </tr>
+)
+
+const formatNumber = (value) =>
+  Number(value || 0).toLocaleString('en-IN')
+
+export default LosingReturnPreview
