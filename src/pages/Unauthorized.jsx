@@ -6,7 +6,12 @@ import { getDefaultRouteForRole } from '../utils/accessControl'
 
 const Unauthorized = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
@@ -20,9 +25,14 @@ const Unauthorized = () => {
           <p className="text-sm font-medium text-gray-500">Current Role</p>
           <p className="mt-1 text-lg font-semibold text-gray-900">{user?.role || 'No Role'}</p>
         </div>
-        <Button className="mt-6" onClick={() => navigate(getDefaultRouteForRole(user?.role))}>
-          Back to My Home
-        </Button>
+        <div className="mt-6 flex justify-center gap-3">
+          <Button onClick={() => navigate(getDefaultRouteForRole(user?.role))}>
+            Back to My Home
+          </Button>
+          <Button variant="secondary" onClick={handleLogout}>
+            Logout
+          </Button>
+        </div>
       </Card>
     </div>
   )

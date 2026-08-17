@@ -230,7 +230,7 @@ const AppRoutes = () => {
 
 <Route
   path="/customers/:id/edit"
-  element={protectedPage(<CustomerEdit />)}
+  element={<Navigate to="/customers" replace />}
 />
 
 
@@ -251,12 +251,12 @@ const AppRoutes = () => {
 
       <Route
         path="/customers/:id"
-        element={protectedPage(<CustomerProfile />)}
+        element={<Navigate to="/customers" replace />}
       />
 
       <Route
         path="/customers/:id/edit"
-        element={protectedPage(<CustomerEdit />)}
+        element={<Navigate to="/customers" replace />}
       />
 
       {/* =====================================================
@@ -268,17 +268,17 @@ const AppRoutes = () => {
 
      <Route
   path="/daily-sessions"
-  element={protectedPage(<DailyBadgeSessions />)}
+  element={<Navigate to="/customers" replace />}
 />
 
 <Route
   path="/daily-badge-sessions"
-  element={<Navigate to="/daily-sessions" replace />}
+  element={<Navigate to="/customers" replace />}
 />
 
 <Route
   path="/badge-sessions"
-  element={<Navigate to="/daily-sessions" replace />}
+  element={<Navigate to="/customers" replace />}
 />
 
 
@@ -331,7 +331,7 @@ const AppRoutes = () => {
 
       <Route
         path="/cashier/cash-out"
-        element={protectedPage(<LosingReturnPreview />)}
+        element={protectedPage(<CashOut />)}
       />
 
       <Route

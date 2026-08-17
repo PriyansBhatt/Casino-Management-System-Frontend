@@ -5,6 +5,7 @@ import {
   ALL_ROLES,
   AUDIT_ROLES,
   CASHIER_ROLES,
+  CHIP_CONTROL_ROLES,
   MANAGEMENT_ROLES,
   PIT_ROLES,
   PROCUREMENT_ROLES,
@@ -21,6 +22,11 @@ const DEPARTMENT_ROLES = [
 
 const REPORT_ROLES = [ROLES.SUPER_ADMIN, ROLES.DIRECTOR, ROLES.ADMIN, ROLES.AUDITOR]
 const DIRECTOR_ROLES = [ROLES.SUPER_ADMIN, ROLES.DIRECTOR, ROLES.ADMIN]
+const CASHIER_RECONCILIATION_ROLES = [
+  ROLES.SUPER_ADMIN,
+  ROLES.DIRECTOR,
+  ROLES.CASHIER,
+]
 
 export const ROUTE_PERMISSIONS = {
   '/dashboard': ALL_ROLES,
@@ -38,14 +44,17 @@ export const ROUTE_PERMISSIONS = {
   '/director/suspicious-alerts': DIRECTOR_ROLES,
   '/director/approval-history': DIRECTOR_ROLES,
   '/director/system-unlock': DIRECTOR_ROLES,
+  '/reception': RECEPTION_ROLES,
   '/reception/customers/new': RECEPTION_ROLES,
   '/reception/customers/search': RECEPTION_ROLES,
   '/reception/customers/:id': RECEPTION_ROLES,
   '/reception/customers/:id/edit': RECEPTION_ROLES,
   '/cashier/buy-in': CASHIER_ROLES,
+  '/chip-control': CHIP_CONTROL_ROLES,
   '/cashier/cash-out': CASHIER_ROLES,
   '/cashier/wallet-transactions': CASHIER_ROLES,
   '/cashier/daily-report': CASHIER_ROLES,
+  '/cashier/reconciliation': CASHIER_RECONCILIATION_ROLES,
   '/pit/tables': PIT_ROLES,
   '/pit/open-sessions': PIT_ROLES,
   '/pit/close-sessions': PIT_ROLES,

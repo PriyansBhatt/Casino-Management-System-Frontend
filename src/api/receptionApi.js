@@ -1,8 +1,8 @@
 import axiosInstance from './axiosInstance'
 
 export const receptionApi = {
-  getCustomers: async () => {
-    const response = await axiosInstance.get('/customers')
+  getCustomers: async (config = {}) => {
+    const response = await axiosInstance.get('/customers', config)
     return response.data
   },
 
@@ -18,9 +18,9 @@ export const receptionApi = {
     return response.data
   },
 
-  getActiveSession: async (customerId) => {
+  getActiveSession: async (customerId, config = {}) => {
     try {
-      const response = await axiosInstance.get(`/sessions/active/customer/${customerId}`)
+      const response = await axiosInstance.get(`/sessions/active/customer/${customerId}`, config)
       return response.data
     } catch (error) {
       if (error.response?.status === 404) {

@@ -1,5 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import pitApi from '../../api/pitApi'
+import receptionApi from '../../api/receptionApi'
+import { getErrorMessage } from '../../utils/errorUtils'
 
 const money = (value) =>
   `NPR ${Number(value || 0).toLocaleString('en-IN')}`
@@ -165,12 +168,15 @@ const inputClass =
 const GamingFloorPitOverview = () => {
   const navigate = useNavigate()
 
-  const [tables, setTables] = useState(initialTables)
+  const [tables, setTables] = useState([])
   const [search, setSearch] = useState('')
   const [gameFilter, setGameFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [dealerFilter, setDealerFilter] = useState('ALL')
-  const [businessDate, setBusinessDate] = useState('2026-07-15')
+  const [businessDate, setBusinessDate] = useState('Not open')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const [selectedTable, setSelectedTable] = useState(null)
   const [showFloorMap, setShowFloorMap] = useState(false)
@@ -185,7 +191,7 @@ const GamingFloorPitOverview = () => {
     return tables.filter((table) => {
       const searchMatch =
         !query ||
-        table.id.toLowerCase().includes(query) ||
+        table.code.toLowerCase().includes(query) ||
         table.name.toLowerCase().includes(query) ||
         table.gameType.toLowerCase().includes(query) ||
         table.dealer.toLowerCase().includes(query) ||
@@ -204,9 +210,7 @@ const GamingFloorPitOverview = () => {
   }, [tables, search, gameFilter, statusFilter, dealerFilter])
 
   const summary = useMemo(() => {
-    const activeTables = tables.filter((table) =>
-      ['ACTIVE', 'RENTED'].includes(table.status),
-    ).length
+    const activeTables = tables.filter((table) => table.status === 'OPEN').length
 
     const players = tables.reduce((total, table) => total + table.players, 0)
     const chipIn = tables.reduce((total, table) => total + table.chipIn, 0)
@@ -240,9 +244,55 @@ const GamingFloorPitOverview = () => {
     window.setTimeout(() => setToast(null), 2800)
   }
 
-  const refreshData = () => {
-    setTables((current) => [...current])
-    showToast(`Gaming floor refreshed at ${nowTime()}.`)
+  const mapTable = (table, playerCount = 0) => ({
+    id: table.id,
+    code: table.tableCode,
+    name: table.tableName,
+    gameType: table.gameType,
+    dealer: 'Not assigned',
+    recorder: 'Not available',
+    supervisor: 'Not assigned',
+    players: playerCount,
+    openingFloat: Number(table.openingFloat || 0),
+    chipIn: 0,
+    winsPaid: 0,
+    lossesCollected: 0,
+    status: table.status,
+    since: table.openedAt
+      ? new Date(table.openedAt).toLocaleTimeString([], {
+          hour: '2-digit', minute: '2-digit', hour12: false,
+        })
+      : 'Unavailable',
+  })
+
+  const loadAuthoritativeTables = async () => {
+    setLoading(true)
+    setLoadError('')
+    try {
+      const [realTables, openBusinessDate] = await Promise.all([
+        pitApi.getAuthoritativeTables(),
+        receptionApi.getCurrentOpenBusinessDate(),
+      ])
+      const playerLists = await Promise.all(
+        realTables.map((table) => pitApi.getAssignedPlayers(table.id)),
+      )
+      setTables(realTables.map((table, index) => mapTable(table, playerLists[index].length)))
+      setBusinessDate(openBusinessDate?.businessDate || 'Not open')
+    } catch (error) {
+      setTables([])
+      setLoadError(getErrorMessage(error))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAuthoritativeTables()
+  }, [])
+
+  const refreshData = async () => {
+    await loadAuthoritativeTables()
+    showToast(`Authoritative gaming floor refreshed at ${nowTime()}.`)
   }
 
   const resetFilters = () => {
@@ -271,7 +321,7 @@ const GamingFloorPitOverview = () => {
     ]
 
     const rows = filteredTables.map((table) => [
-      table.id,
+      table.code,
       table.name,
       table.gameType,
       table.dealer,
@@ -365,12 +415,6 @@ const GamingFloorPitOverview = () => {
 
     if (!sessionForm.tableId.trim()) errors.tableId = 'Table ID is required.'
     if (!sessionForm.name.trim()) errors.name = 'Table name is required.'
-    if (!sessionForm.dealer.trim()) errors.dealer = 'Dealer is required.'
-    if (!sessionForm.recorder.trim()) errors.recorder = 'Recorder is required.'
-    if (!sessionForm.supervisor.trim()) {
-      errors.supervisor = 'Supervisor is required.'
-    }
-
     if (
       sessionForm.openingFloat === '' ||
       Number(sessionForm.openingFloat) < 0
@@ -380,7 +424,7 @@ const GamingFloorPitOverview = () => {
 
     const duplicateId = tables.some(
       (table) =>
-        table.id.toLowerCase() === sessionForm.tableId.trim().toLowerCase(),
+        table.code.toLowerCase() === sessionForm.tableId.trim().toLowerCase(),
     )
 
     if (duplicateId) errors.tableId = 'This table ID already exists.'
@@ -389,30 +433,27 @@ const GamingFloorPitOverview = () => {
     return Object.keys(errors).length === 0
   }
 
-  const createSession = () => {
+  const createSession = async () => {
     if (!validateSession()) return
-
-    const newTable = {
-      id: sessionForm.tableId.trim().toUpperCase(),
-      name: sessionForm.name.trim(),
-      gameType: sessionForm.gameType,
-      dealer: sessionForm.dealer.trim(),
-      recorder: sessionForm.recorder.trim(),
-      supervisor: sessionForm.supervisor.trim(),
-      players: 0,
-      openingFloat: Number(sessionForm.openingFloat),
-      chipIn: 0,
-      winsPaid: 0,
-      lossesCollected: 0,
-      status: sessionForm.gameType === 'Rented Flush' ? 'RENTED' : 'ACTIVE',
-      since: nowTime(),
+    setSubmitting(true)
+    try {
+      const created = await pitApi.createAuthoritativeTable({
+        tableCode: sessionForm.tableId.trim(),
+        tableName: sessionForm.name.trim(),
+        gameType: sessionForm.gameType,
+        openingFloat: Number(sessionForm.openingFloat),
+      })
+      await loadAuthoritativeTables()
+      setSessionForm(emptySessionForm)
+      setFormErrors({})
+      setShowNewSession(false)
+      showToast(`${created.tableName} opened for Business Date ${created.businessDate}.`)
+      navigate(`/pit/tables/${created.id}`)
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error')
+    } finally {
+      setSubmitting(false)
     }
-
-    setTables((current) => [newTable, ...current])
-    setSessionForm(emptySessionForm)
-    setFormErrors({})
-    setShowNewSession(false)
-    showToast(`${newTable.name} session started.`)
   }
 
   return (
@@ -434,9 +475,9 @@ const GamingFloorPitOverview = () => {
 
         <div className="flex flex-wrap gap-2">
           <input
-            type="date"
+            type="text"
             value={businessDate}
-            onChange={(event) => setBusinessDate(event.target.value)}
+            readOnly
             className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-amber-400"
           />
 
@@ -469,6 +510,17 @@ const GamingFloorPitOverview = () => {
           </button>
         </div>
       </section>
+
+      {loading && (
+        <p className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm font-bold text-sky-700">
+          Loading authoritative Pit Tables...
+        </p>
+      )}
+      {loadError && (
+        <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+          {loadError}
+        </p>
+      )}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
@@ -532,7 +584,7 @@ const GamingFloorPitOverview = () => {
               className={inputClass}
             >
               <option value="ALL">All Statuses</option>
-              <option value="ACTIVE">Active</option>
+              <option value="OPEN">Open</option>
               <option value="IDLE">Idle</option>
               <option value="RENTED">Rented</option>
               <option value="CLOSED">Closed</option>
@@ -573,7 +625,7 @@ const GamingFloorPitOverview = () => {
           <CompactTotal label="Visible Tables" value={filteredTables.length} />
           <CompactTotal
             label="Active"
-            value={filteredTables.filter((table) => table.status === 'ACTIVE').length}
+            value={filteredTables.filter((table) => table.status === 'OPEN').length}
           />
           <CompactTotal
             label="Players"
@@ -658,7 +710,7 @@ const GamingFloorPitOverview = () => {
                         className="text-left"
                       >
                         <span className="inline-flex rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 font-mono text-xs font-black text-amber-700">
-                          {table.id}
+                          {table.code}
                         </span>
                         <p className="mt-2 text-sm font-black text-slate-950">
                           {table.name}
@@ -687,8 +739,9 @@ const GamingFloorPitOverview = () => {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => changePlayerCount(table.id, -1)}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white font-black text-slate-600 hover:bg-slate-100"
+                          disabled
+                          title="Player totals come from authoritative assignments"
+                          className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 font-black text-slate-400"
                         >
                           −
                         </button>
@@ -697,8 +750,9 @@ const GamingFloorPitOverview = () => {
                         </span>
                         <button
                           type="button"
-                          onClick={() => changePlayerCount(table.id, 1)}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white font-black text-slate-600 hover:bg-slate-100"
+                          disabled
+                          title="Assign players from the authoritative table page"
+                          className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 font-black text-slate-400"
                         >
                           +
                         </button>
@@ -784,7 +838,7 @@ const GamingFloorPitOverview = () => {
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <ModalHeader
               title={selectedTable.name}
-              description={`${selectedTable.id} · ${selectedTable.gameType}`}
+              description={`${selectedTable.code} · ${selectedTable.gameType}`}
               onClose={() => setSelectedTable(null)}
             />
 
@@ -840,21 +894,19 @@ const GamingFloorPitOverview = () => {
 
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                  Update Table Status
+                  Authoritative Table Status
                 </p>
 
                 <div className="grid gap-2 sm:grid-cols-4">
-                  {['ACTIVE', 'IDLE', 'RENTED', 'CLOSED'].map((status) => (
+                  {['OPEN', 'CLOSED'].map((status) => (
                     <button
                       key={status}
                       type="button"
-                      onClick={() =>
-                        updateTableStatus(selectedTable.id, status)
-                      }
+                      disabled
                       className={`rounded-lg border px-3 py-2.5 text-xs font-black transition ${
                         selectedTable.status === status
                           ? 'border-amber-400 bg-amber-100 text-amber-800'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
                       }`}
                     >
                       {status}
@@ -1012,9 +1064,10 @@ const GamingFloorPitOverview = () => {
               <button
                 type="button"
                 onClick={createSession}
-                className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300"
+                disabled={submitting}
+                className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300 disabled:opacity-50"
               >
-                Start Session
+                {submitting ? 'Starting...' : 'Start Session'}
               </button>
             </div>
           </div>
@@ -1044,7 +1097,7 @@ const GamingFloorPitOverview = () => {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <span className="rounded-lg border border-amber-300 bg-white px-2 py-1 font-mono text-xs font-black text-amber-700">
-                        {table.id}
+                        {table.code}
                       </span>
                       <StatusBadge status={table.status} />
                     </div>

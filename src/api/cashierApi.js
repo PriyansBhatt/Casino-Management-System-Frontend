@@ -73,23 +73,87 @@ const filterTransactions = (filters = {}) => {
 
 export const cashierApi = {
   createBuyIn: async (payload) => {
-    if (isMockCashierEnabled()) {
-      await wait()
-      return createTransaction(payload, BUY_IN)
-    }
+    const response = await axiosInstance.post('/buyins', payload)
+    return response.data?.data
+  },
 
-    const response = await axiosInstance.post('/cashier/buy-ins', payload)
+  getBuyInsBySession: async (sessionId) => {
+    const response = await axiosInstance.get(`/buyins/session/${sessionId}`)
     return response.data
   },
 
-  createCashOut: async (payload) => {
-    if (isMockCashierEnabled()) {
-      await wait()
-      return createTransaction(payload, CASH_OUT)
-    }
+  getCurrentBusinessDateBuyIns: async () => {
+    const response = await axiosInstance.get('/buyins/current', { skipUnauthorizedRedirect: true })
+    return response.data?.data
+  },
 
-    const response = await axiosInstance.post('/cashier/cash-outs', payload)
+  createCashOut: async (payload) => {
+    const response = await axiosInstance.post('/cashouts', payload, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  getCashOutsBySession: async (sessionId) => {
+    const response = await axiosInstance.get(`/cashouts/session/${sessionId}`, {
+      skipUnauthorizedRedirect: true,
+    })
     return response.data
+  },
+
+  getSessionFinancialPosition: async (sessionId) => {
+    const response = await axiosInstance.get(`/session-summary/${sessionId}`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  getChipControlSessions: async () => {
+    const response = await axiosInstance.get('/chip-control/sessions', {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  getCurrentCashierReconciliation: async () => {
+    const response = await axiosInstance.get('/cashier-reconciliation/current', {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  previewCashierReconciliation: async (payload) => {
+    const response = await axiosInstance.post('/cashier-reconciliation/preview', payload, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  submitCashierReconciliation: async (payload) => {
+    const response = await axiosInstance.post('/cashier-reconciliation/submit', payload, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  getSubmittedCashierReconciliations: async () => {
+    const response = await axiosInstance.get('/cashier-reconciliation/current/submitted', { skipUnauthorizedRedirect: true })
+    return response.data?.data
+  },
+
+  reopenCashierReconciliation: async (id, reason) => {
+    const response = await axiosInstance.post(`/cashier-reconciliation/${id}/reopen`, { reason }, { skipUnauthorizedRedirect: true })
+    return response.data?.data
+  },
+
+  getLosingReturnEligibility: async (customerId) => {
+    const response = await axiosInstance.get(`/losing-returns/eligibility/customer/${customerId}`, { skipUnauthorizedRedirect: true })
+    return response.data?.data
+  },
+
+  createLosingReturn: async (payload) => {
+    const response = await axiosInstance.post('/losing-returns', payload, { skipUnauthorizedRedirect: true })
+    return response.data?.data
   },
 
   getWalletTransactions: async (filters = {}) => {
@@ -142,6 +206,8 @@ export const cashierApi = {
 
 export const createBuyIn = cashierApi.createBuyIn
 export const createCashOut = cashierApi.createCashOut
+export const getCashOutsBySession = cashierApi.getCashOutsBySession
+export const getSessionFinancialPosition = cashierApi.getSessionFinancialPosition
 export const getWalletTransactions = cashierApi.getWalletTransactions
 export const getCustomerWalletTransactions = cashierApi.getCustomerWalletTransactions
 export const getDailyCashierSummary = cashierApi.getDailyCashierSummary

@@ -1,66 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import cashierApi from '../../api/cashierApi'
+import receptionApi from '../../api/receptionApi'
+import useAuth from '../../hooks/useAuth'
+import { getErrorMessage } from '../../utils/errorUtils'
 
-const BUSINESS_DATE = '2026-07-15'
-const CASHIER_NAME = 'Anil Cashier'
-const OPENING_CASH = 5000000
 const PAGE_SIZE = 8
-
-const customers = [
-  {
-    badge: '001',
-    cid: 'CID-1001',
-    name: 'Raj Sharma',
-    initials: 'RS',
-    category: 'VIP',
-    session: 'SES-2026-07-15-001',
-    status: 'INSIDE',
-  },
-  {
-    badge: '002',
-    cid: 'CID-1002',
-    name: 'Amit Verma',
-    initials: 'AV',
-    category: 'NORMAL',
-    session: 'SES-2026-07-15-002',
-    status: 'INSIDE',
-  },
-  {
-    badge: '003',
-    cid: 'CID-1003',
-    name: 'Daniel Smith',
-    initials: 'DS',
-    category: 'VVIP',
-    session: 'SES-2026-07-15-003',
-    status: 'INSIDE',
-  },
-  {
-    badge: '004',
-    cid: 'CID-1004',
-    name: 'Suresh Rai',
-    initials: 'SR',
-    category: 'STANDARD',
-    session: 'SES-2026-07-15-004',
-    status: 'INSIDE',
-  },
-  {
-    badge: '005',
-    cid: 'CID-1005',
-    name: 'Priya Tamang',
-    initials: 'PT',
-    category: 'VIP',
-    session: 'SES-2026-07-15-005',
-    status: 'INSIDE',
-  },
-  {
-    badge: '006',
-    cid: 'CID-1006',
-    name: 'Ahmed Khan',
-    initials: 'AK',
-    category: 'NORMAL',
-    session: 'SES-2026-07-15-006',
-    status: 'INSIDE',
-  },
-]
 
 const initialTransactions = [
   {
@@ -81,8 +25,8 @@ const initialTransactions = [
     source: '',
     shift: '',
     remarks: '',
-    cashier: CASHIER_NAME,
-    status: 'POSTED',
+    cashier: 'Prototype record',
+    status: 'DEMO RECORD',
   },
   {
     id: 'BI-2026-07-15-002',
@@ -102,8 +46,8 @@ const initialTransactions = [
     source: '',
     shift: '',
     remarks: '',
-    cashier: CASHIER_NAME,
-    status: 'POSTED',
+    cashier: 'Prototype record',
+    status: 'DEMO RECORD',
   },
   {
     id: 'MC-2026-07-15-003',
@@ -123,8 +67,8 @@ const initialTransactions = [
     source: '',
     shift: '',
     remarks: '',
-    cashier: CASHIER_NAME,
-    status: 'POSTED',
+    cashier: 'Prototype record',
+    status: 'DEMO RECORD',
   },
   {
     id: 'BI-2026-07-15-004',
@@ -144,8 +88,8 @@ const initialTransactions = [
     source: '',
     shift: '',
     remarks: '',
-    cashier: CASHIER_NAME,
-    status: 'POSTED',
+    cashier: 'Prototype record',
+    status: 'DEMO RECORD',
   },
   {
     id: 'TP-2026-07-15-005',
@@ -165,8 +109,8 @@ const initialTransactions = [
     source: 'Gaming Floor',
     shift: 'Day 13:00–23:00',
     remarks: 'Good table performance',
-    cashier: CASHIER_NAME,
-    status: 'POSTED',
+    cashier: 'Prototype record',
+    status: 'DEMO RECORD',
   },
 ]
 
@@ -225,6 +169,16 @@ const getCurrentTime = () =>
     hour12: false,
   })
 
+const getCurrentTimeFromTimestamp = (value) => {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+const paymentModeLabel = (mode) =>
+  ({ CASH: 'Cash', BANK: 'Bank', QR: 'QR', CARD: 'Card' })[mode] || mode || 'Unknown'
+
 const transactionTypeLabel = {
   CHIP_BUY_IN: 'Chip Buy-In',
   MACHINE_CASH_IN: 'Machine Cash-In',
@@ -239,6 +193,36 @@ const typePrefix = {
 
 const requiresReference = (paymentMethod) =>
   ['QR', 'Card', 'Bank'].includes(paymentMethod)
+
+const paymentModeMap = {
+  Cash: 'CASH',
+  Bank: 'BANK',
+  QR: 'QR',
+  Card: 'CARD',
+}
+
+const createIdempotencyKey = () =>
+  globalThis.crypto?.randomUUID?.() ||
+  `buyin-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+const mapBackendCustomer = (customer) => ({
+  id: customer.id,
+  cid: customer.customerCode || 'Code unavailable',
+  name: customer.fullName || 'Name unavailable',
+  initials: String(customer.fullName || '?')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase(),
+  phone: customer.phone || '',
+  nationality: customer.nationality || '',
+  category: customer.category || 'Category unavailable',
+  status: customer.status || 'Status unavailable',
+  hasActiveSession: Boolean(customer.hasActiveSession),
+  activeSessionId: customer.activeSessionId || null,
+})
 
 const inputClass =
   'h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20'
@@ -288,7 +272,7 @@ const CustomerCard = ({ customer, onClear }) => {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center">
         <p className="text-sm font-bold text-slate-600">
-          Verify a badge number, CID or customer name.
+          Verify a customer code, name, phone or nationality.
         </p>
         <p className="mt-1 text-xs text-slate-400">
           The customer must have an active reception session.
@@ -311,9 +295,11 @@ const CustomerCard = ({ customer, onClear }) => {
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            {customer.cid} · Badge {customer.badge} · {customer.category}
+            {customer.cid} · {customer.phone || 'Phone unavailable'} · {customer.category}
           </p>
-          <p className="mt-1 text-xs text-slate-500">{customer.session}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {customer.sessionCode || 'Session code unavailable'} · Badge unavailable
+          </p>
         </div>
         <button
           type="button"
@@ -373,6 +359,13 @@ const Panel = ({ title, description, children, footer }) => (
 )
 
 const CashCollectionBuyIn = () => {
+  const { user } = useAuth()
+  const [customers, setCustomers] = useState([])
+  const [businessDate, setBusinessDate] = useState(null)
+  const [isLoadingContext, setIsLoadingContext] = useState(true)
+  const [contextError, setContextError] = useState(null)
+  const [reconciliationFinalized, setReconciliationFinalized] = useState(false)
+  const [isVerifyingCustomer, setIsVerifyingCustomer] = useState(false)
   const [transactions, setTransactions] = useState(initialTransactions)
   const [activeForm, setActiveForm] = useState('CHIP_BUY_IN')
   const [historyType, setHistoryType] = useState('ALL')
@@ -386,34 +379,110 @@ const CashCollectionBuyIn = () => {
   const [errors, setErrors] = useState({})
   const [toast, setToast] = useState(null)
   const [posting, setPosting] = useState(false)
+  const chipSubmissionRef = useRef({ key: null, signature: null })
+
+  const cashierDisplay = user?.fullName || user?.username || 'Authenticated user unavailable'
+  const cashierRole = user?.role || 'Role unavailable'
+  const businessDateValue = businessDate?.businessDate || null
+
+  useEffect(() => {
+    let active = true
+
+    const loadContext = async () => {
+      setIsLoadingContext(true)
+      setContextError(null)
+
+      const [customersResult, businessDateResult, reconciliationResult, buyInHistoryResult] = await Promise.allSettled([
+        receptionApi.getCustomers(),
+        receptionApi.getCurrentOpenBusinessDate(),
+        cashierApi.getCurrentCashierReconciliation(),
+        cashierApi.getCurrentBusinessDateBuyIns(),
+      ])
+
+      if (!active) return
+
+      const errors = []
+
+      if (customersResult.status === 'fulfilled') {
+        const records = Array.isArray(customersResult.value)
+          ? customersResult.value
+          : []
+        setCustomers(records.map(mapBackendCustomer))
+      } else {
+        setCustomers([])
+        errors.push('Unable to load the customer directory.')
+      }
+
+      if (businessDateResult.status === 'fulfilled') {
+        setBusinessDate(businessDateResult.value)
+        if (!businessDateResult.value) {
+          errors.push('No business date is currently open.')
+        }
+      } else {
+        setBusinessDate(null)
+        errors.push('Unable to load the current business date.')
+      }
+
+      if (reconciliationResult.status === 'fulfilled') {
+        setReconciliationFinalized(reconciliationResult.value?.lifecycleStatus === 'SUBMITTED')
+      } else {
+        setReconciliationFinalized(false)
+        errors.push('Unable to verify cashier reconciliation status.')
+      }
+
+      if (buyInHistoryResult.status === 'fulfilled') {
+        const persisted = (Array.isArray(buyInHistoryResult.value) ? buyInHistoryResult.value : [])
+          .map((item) => mapPersistedBuyIn(item.transaction, { cid: item.customerCode, name: item.customerName }))
+        setTransactions((current) => mergePersistedTransactions(current, persisted))
+      } else {
+        errors.push('Unable to load persisted Chip Buy-In history.')
+      }
+
+      setContextError(errors.length ? errors.join(' ') : null)
+      setIsLoadingContext(false)
+    }
+
+    loadContext()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const summary = useMemo(() => {
+    const persistedChipTransactions = transactions.filter(
+      (transaction) =>
+        transaction.type === 'CHIP_BUY_IN' && transaction.status === 'PERSISTED',
+    )
     const sumByType = (type) =>
       transactions
         .filter((transaction) => transaction.type === type)
         .reduce((total, transaction) => total + transaction.nprAmount, 0)
 
-    const nonCash = transactions
+    const nonCash = persistedChipTransactions
       .filter((transaction) =>
         ['QR', 'Card', 'Bank'].includes(transaction.paymentMethod),
       )
       .reduce((total, transaction) => total + transaction.nprAmount, 0)
 
-    const cashReceived = transactions
+    const cashReceived = persistedChipTransactions
       .filter((transaction) => transaction.paymentMethod === 'Cash')
       .reduce((total, transaction) => total + transaction.nprAmount, 0)
 
     return {
-      chip: sumByType('CHIP_BUY_IN'),
+      chip: persistedChipTransactions.reduce(
+        (total, transaction) => total + transaction.nprAmount,
+        0,
+      ),
       machine: sumByType('MACHINE_CASH_IN'),
       tips: sumByType('TIPS'),
-      total: transactions.reduce(
+      total: persistedChipTransactions.reduce(
         (total, transaction) => total + transaction.nprAmount,
         0,
       ),
       nonCash,
       cashReceived,
-      count: transactions.length,
+      count: persistedChipTransactions.length,
     }
   }, [transactions])
 
@@ -472,44 +541,135 @@ const CashCollectionBuyIn = () => {
 
     return customers.find(
       (customer) =>
-        customer.badge.toLowerCase() === normalized ||
         customer.cid.toLowerCase() === normalized ||
-        customer.name.toLowerCase().includes(normalized),
+        customer.name.toLowerCase().includes(normalized) ||
+        customer.phone.toLowerCase().includes(normalized) ||
+        customer.nationality.toLowerCase().includes(normalized),
     )
   }
 
-  const verifyChipCustomer = () => {
-    const found = findCustomer(chipForm.customerSearch)
+  const getVerifiedActiveCustomer = async (query) => {
+    if (isLoadingContext) {
+      throw new Error('Customer data is still loading. Please wait.')
+    }
+
+    const found = findCustomer(query)
 
     if (!found) {
+      throw new Error('No matching backend customer was found.')
+    }
+
+    if (String(found.status).toUpperCase() !== 'ACTIVE') {
+      throw new Error('This customer is not active.')
+    }
+
+    const activeSession = await receptionApi.getActiveSession(found.id)
+
+    if (!activeSession) {
+      throw new Error('This customer does not have an active reception session.')
+    }
+
+    return {
+      ...found,
+      sessionId: activeSession.id || found.activeSessionId,
+      sessionCode: activeSession.sessionCode || 'Session code unavailable',
+      sessionBusinessDate: activeSession.businessDate || null,
+      entryTime: activeSession.entryTime || null,
+    }
+  }
+
+  const mapPersistedBuyIn = (buyIn, customer) => ({
+    id: buyIn.buyInCode || buyIn.id,
+    backendId: buyIn.id,
+    type: 'CHIP_BUY_IN',
+    time: buyIn.createdAt ? getCurrentTimeFromTimestamp(buyIn.createdAt) : '—',
+    customerId: buyIn.customerId,
+    badge: '',
+    cid: customer?.cid || '',
+    customer: customer?.name || '',
+    currency: 'NPR',
+    originalAmount: Number(buyIn.amountReceived || 0),
+    exchangeRate: 1,
+    nprAmount: Number(buyIn.totalChipValueIssued || 0),
+    paymentMethod: paymentModeLabel(buyIn.paymentMode),
+    reference: buyIn.paymentReference || '',
+    machineType: '',
+    machineNumber: '',
+    source: '',
+    shift: '',
+    remarks: buyIn.remarks || '',
+    cashier: buyIn.createdBy?.username || 'Backend user',
+    status: 'PERSISTED',
+  })
+
+  const mergePersistedTransactions = (current, incoming) => {
+    const byBackendId = new Map()
+    incoming.filter((item) => item.backendId)
+      .forEach((item) => byBackendId.set(item.backendId, item))
+    current.filter((item) => item.status === 'PERSISTED' && item.backendId)
+      .forEach((item) => {
+        if (!byBackendId.has(item.backendId)) {
+          byBackendId.set(item.backendId, item)
+        }
+      })
+    return [
+      ...byBackendId.values(),
+      ...current.filter((item) => item.status !== 'PERSISTED'),
+    ]
+  }
+
+  const refreshCurrentBusinessDateBuyIns = async () => {
+    const records = await cashierApi.getCurrentBusinessDateBuyIns()
+    const persisted = (Array.isArray(records) ? records : [])
+      .map((item) => mapPersistedBuyIn(item.transaction, { cid: item.customerCode, name: item.customerName }))
+    setTransactions((current) => mergePersistedTransactions(current, persisted))
+  }
+
+  const refreshPersistedChipBuyIns = async (customer) => {
+    const records = await cashierApi.getBuyInsBySession(customer.sessionId)
+    const persisted = Array.isArray(records)
+      ? records.map((record) => mapPersistedBuyIn(record, customer))
+      : []
+    setTransactions((current) => mergePersistedTransactions(current, persisted))
+  }
+
+  const verifyChipCustomer = async () => {
+    setIsVerifyingCustomer(true)
+
+    try {
+      const found = await getVerifiedActiveCustomer(chipForm.customerSearch)
+      setChipForm((current) => ({ ...current, customer: found }))
+      await refreshPersistedChipBuyIns(found)
+      setErrors((current) => ({ ...current, chipCustomer: '' }))
+      showToast(`${found.name} verified for chip buy-in.`)
+    } catch (error) {
       setChipForm((current) => ({ ...current, customer: null }))
       setErrors((current) => ({
         ...current,
-        chipCustomer: 'No active customer session was found.',
+        chipCustomer: error.message || 'Unable to verify the customer session.',
       }))
-      return
+    } finally {
+      setIsVerifyingCustomer(false)
     }
-
-    setChipForm((current) => ({ ...current, customer: found }))
-    setErrors((current) => ({ ...current, chipCustomer: '' }))
-    showToast(`${found.name} verified for chip buy-in.`)
   }
 
-  const verifyMachineCustomer = () => {
-    const found = findCustomer(machineForm.customerSearch)
+  const verifyMachineCustomer = async () => {
+    setIsVerifyingCustomer(true)
 
-    if (!found) {
+    try {
+      const found = await getVerifiedActiveCustomer(machineForm.customerSearch)
+      setMachineForm((current) => ({ ...current, customer: found }))
+      setErrors((current) => ({ ...current, machineCustomer: '' }))
+      showToast(`${found.name} verified for machine cash-in.`)
+    } catch (error) {
       setMachineForm((current) => ({ ...current, customer: null }))
       setErrors((current) => ({
         ...current,
-        machineCustomer: 'No active customer session was found.',
+        machineCustomer: error.message || 'Unable to verify the customer session.',
       }))
-      return
+    } finally {
+      setIsVerifyingCustomer(false)
     }
-
-    setMachineForm((current) => ({ ...current, customer: found }))
-    setErrors((current) => ({ ...current, machineCustomer: '' }))
-    showToast(`${found.name} verified for machine cash-in.`)
   }
 
   const parseAmount = (value) =>
@@ -591,6 +751,23 @@ const CashCollectionBuyIn = () => {
     return Object.keys(nextErrors).length === 0
   }
 
+  const canPostChipBuyIn = useMemo(() => {
+    const amount = parseAmount(chipForm.amount)
+    return Boolean(
+      chipForm.customer?.id &&
+        chipForm.customer?.sessionId &&
+        chipForm.currency === 'NPR' &&
+        Number.isFinite(amount) &&
+        amount > 0 &&
+        chipDenominationTotal > 0 &&
+        amount === chipDenominationTotal &&
+        (!requiresReference(chipForm.paymentMethod) || chipForm.reference.trim()) &&
+        businessDateValue &&
+        !reconciliationFinalized &&
+        !posting,
+    )
+  }, [businessDateValue, chipDenominationTotal, chipForm, posting, reconciliationFinalized])
+
   const validateMachine = () => {
     const nextErrors = {}
     const amount = parseAmount(machineForm.amount)
@@ -655,10 +832,71 @@ const CashCollectionBuyIn = () => {
 
   const createTransactionId = (type) => {
     const nextNumber = transactions.length + 1
-    return `${typePrefix[type]}-${BUSINESS_DATE}-${String(nextNumber).padStart(
+    return `${typePrefix[type]}-${businessDateValue || 'NO-OPEN-DATE'}-${String(nextNumber).padStart(
       3,
       '0',
     )}`
+  }
+
+  const postChipBuyIn = async () => {
+    if (!validateChip() || posting || chipForm.currency !== 'NPR') {
+      return
+    }
+
+    const amountReceived = parseAmount(chipForm.amount)
+    const payloadWithoutKey = {
+      customerId: chipForm.customer.id,
+      customerSessionId: chipForm.customer.sessionId,
+      amountReceived,
+      paymentMode: paymentModeMap[chipForm.paymentMethod],
+      totalChipValueIssued: chipDenominationTotal,
+      paymentReference: requiresReference(chipForm.paymentMethod)
+        ? chipForm.reference.trim()
+        : null,
+      remarks: chipForm.remarks.trim() || null,
+    }
+    const signature = JSON.stringify(payloadWithoutKey)
+
+    if (chipSubmissionRef.current.signature !== signature) {
+      chipSubmissionRef.current = {
+        key: createIdempotencyKey(),
+        signature,
+      }
+    }
+
+    setPosting(true)
+    setErrors({})
+    try {
+      const created = await cashierApi.createBuyIn({
+        ...payloadWithoutKey,
+        idempotencyKey: chipSubmissionRef.current.key,
+      })
+
+      await refreshCurrentBusinessDateBuyIns()
+      setCurrentPage(1)
+      setChipForm((current) => ({
+        ...emptyChipForm,
+        customerSearch: current.customerSearch,
+        customer: current.customer,
+      }))
+      chipSubmissionRef.current = { key: null, signature: null }
+      showToast(
+        `Chip Buy-In ${created.buyInCode} posted successfully. ${formatNpr(
+          created.amountReceived,
+        )} received.`,
+      )
+    } catch (error) {
+      const status = error.response?.status
+      const backendMessage = getErrorMessage(error)
+      const message =
+        status === 409
+          ? backendMessage || 'This transaction conflicts with an earlier submission.'
+          : backendMessage
+      setErrors((current) => ({ ...current, chipSubmit: message }))
+      showToast(message, 'error')
+    } finally {
+      setPosting(false)
+    }
   }
 
   const postTransaction = (type) => {
@@ -696,7 +934,8 @@ const CashCollectionBuyIn = () => {
       id: createTransactionId(type),
       type,
       time: getCurrentTime(),
-      badge: customer?.badge || '',
+      customerId: customer?.id || null,
+      badge: '',
       cid: customer?.cid || '',
       customer: customer?.name || '',
       currency: form.currency,
@@ -714,8 +953,8 @@ const CashCollectionBuyIn = () => {
       source: type === 'TIPS' ? form.source : '',
       shift: type === 'TIPS' ? form.shift : '',
       remarks: form.remarks.trim(),
-      cashier: CASHIER_NAME,
-      status: 'POSTED',
+      cashier: cashierDisplay,
+      status: 'LOCAL ONLY',
     }
 
     setTransactions((current) => [transaction, ...current])
@@ -730,7 +969,7 @@ const CashCollectionBuyIn = () => {
     }
 
     setErrors({})
-    showToast(`${transactionTypeLabel[type]} posted successfully.`)
+    showToast(`${transactionTypeLabel[type]} added to local prototype history.`)
     setPosting(false)
   }
 
@@ -761,7 +1000,7 @@ const CashCollectionBuyIn = () => {
     const rows = filteredTransactions.map((transaction) => [
       transaction.id,
       transactionTypeLabel[transaction.type],
-      BUSINESS_DATE,
+      businessDateValue || 'No open business date',
       transaction.time,
       transaction.badge,
       transaction.cid,
@@ -796,7 +1035,7 @@ const CashCollectionBuyIn = () => {
     const anchor = document.createElement('a')
 
     anchor.href = url
-    anchor.download = `cash-collection-${BUSINESS_DATE}.csv`
+    anchor.download = `cash-collection-${businessDateValue || 'no-open-date'}.csv`
     anchor.click()
 
     URL.revokeObjectURL(url)
@@ -823,11 +1062,12 @@ const CashCollectionBuyIn = () => {
         title="Chip Buy-In"
         description="Verify the customer, collect payment and issue chips by denomination."
       >
+        {reconciliationFinalized && <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-black text-amber-800">CASHIER RECONCILIATION SUBMITTED — new Chip Buy-Ins are disabled for this Business Date.</div>}
         <div className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
               <Field
-                label="Badge, CID or Customer Name"
+                label="Customer Code, Name, Phone or Nationality"
                 required
                 error={errors.chipCustomer}
               >
@@ -847,16 +1087,17 @@ const CashCollectionBuyIn = () => {
                     }
                   }}
                   className={inputClass}
-                  placeholder="Example: 001, CID-1001 or Raj Sharma"
+                  placeholder="Search the real customer directory"
                 />
               </Field>
               <div className="flex items-end">
                 <button
                   type="button"
                   onClick={verifyChipCustomer}
+                  disabled={isLoadingContext || isVerifyingCustomer}
                   className={`${buttonBase} bg-amber-400 text-slate-950 hover:bg-amber-300`}
                 >
-                  Verify Customer
+                  {isVerifyingCustomer ? 'Verifying…' : 'Verify Customer'}
                 </button>
               </div>
             </div>
@@ -906,7 +1147,11 @@ const CashCollectionBuyIn = () => {
             </div>
 
             {chipForm.currency === 'INR' && (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                  INR real posting is not yet enabled. Select NPR to post a Chip Buy-In.
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="INR to NPR Exchange Rate"
                   required
@@ -931,6 +1176,7 @@ const CashCollectionBuyIn = () => {
                     className={`${inputClass} bg-slate-50 font-black`}
                   />
                 </Field>
+                </div>
               </div>
             )}
 
@@ -1107,15 +1353,21 @@ const CashCollectionBuyIn = () => {
                       : 'text-red-700'
                   }`}
                 >
-                  {formatNpr(chipDenominationTotal - converted)}
+                  {formatNpr(converted - chipDenominationTotal)}
                 </span>
               </div>
             </div>
 
+            {errors.chipSubmit && (
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                {errors.chipSubmit}
+              </p>
+            )}
+
             <button
               type="button"
-              disabled={posting}
-              onClick={() => postTransaction('CHIP_BUY_IN')}
+              disabled={!canPostChipBuyIn}
+              onClick={postChipBuyIn}
               className="mt-4 h-12 w-full rounded-xl bg-amber-400 text-sm font-black text-slate-950 transition hover:bg-amber-300 disabled:opacity-50"
             >
               {posting ? 'Posting…' : 'Post Chip Buy-In'}
@@ -1142,7 +1394,7 @@ const CashCollectionBuyIn = () => {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
               <Field
-                label="Badge, CID or Customer Name"
+                label="Customer Code, Name, Phone or Nationality"
                 required
                 error={errors.machineCustomer}
               >
@@ -1162,16 +1414,17 @@ const CashCollectionBuyIn = () => {
                     }
                   }}
                   className={inputClass}
-                  placeholder="Example: 003, CID-1003 or Daniel Smith"
+                  placeholder="Search the real customer directory"
                 />
               </Field>
               <div className="flex items-end">
                 <button
                   type="button"
                   onClick={verifyMachineCustomer}
+                  disabled={isLoadingContext || isVerifyingCustomer}
                   className={`${buttonBase} bg-sky-500 text-white hover:bg-sky-400`}
                 >
-                  Verify Customer
+                  {isVerifyingCustomer ? 'Verifying…' : 'Verify Customer'}
                 </button>
               </div>
             </div>
@@ -1383,7 +1636,7 @@ const CashCollectionBuyIn = () => {
               />
               <PreviewRow
                 label="Cashier"
-                value={CASHIER_NAME}
+                value={`${cashierDisplay} · ${cashierRole}`}
               />
               <PreviewRow
                 label="Status after posting"
@@ -1601,7 +1854,7 @@ const CashCollectionBuyIn = () => {
                 value={formatNpr(converted)}
                 strong
               />
-              <PreviewRow label="Collected by" value={CASHIER_NAME} />
+              <PreviewRow label="Collected by" value={`${cashierDisplay} · ${cashierRole}`} />
               <PreviewRow label="Time" value={getCurrentTime()} />
             </div>
 
@@ -1635,24 +1888,40 @@ const CashCollectionBuyIn = () => {
               focused transaction workspace.
             </p>
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs font-semibold text-slate-500">
-              <span>Cashier: {CASHIER_NAME}</span>
-              <span>Business Date: {BUSINESS_DATE}</span>
-              <span>Opening Cash: {formatNpr(OPENING_CASH)}</span>
+              <span>Cashier: {cashierDisplay}</span>
+              <span>Role: {cashierRole}</span>
+              <span>Business Date: {isLoadingContext ? 'Loading…' : businessDateValue || 'Not open'}</span>
+              <span>Opening Cash: Unavailable</span>
             </div>
           </div>
 
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <span className="font-black">Reporting rule:</span> NPR is the
-            reporting currency. INR transactions retain the original amount
-            and exchange rate.
+            reporting currency for real Chip Buy-In posting. INR remains disabled for that workflow.
           </div>
         </section>
+
+        {isLoadingContext && (
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700">
+            Loading the real customer directory and current business date…
+          </div>
+        )}
+
+        {contextError && !isLoadingContext && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+            {contextError}
+          </div>
+        )}
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span className="font-black">Integration status:</span> Chip Buy-In transactions are posted to the backend. Machine Cash-In and Tips Collection remain prototype-only.
+        </div>
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <SummaryCard
             label="Chip Buy-In Today"
             value={formatNpr(summary.chip)}
-            note="Customer chip purchases"
+            note="Persisted for verified session"
             icon="💵"
             tone="emerald"
           />
@@ -1673,21 +1942,21 @@ const CashCollectionBuyIn = () => {
           <SummaryCard
             label="Total Received"
             value={formatNpr(summary.total)}
-            note={`${summary.count} transactions`}
+            note={`${summary.count} persisted chip buy-ins only`}
             icon="💰"
             tone="amber"
           />
           <SummaryCard
             label="Non-Cash Received"
             value={formatNpr(summary.nonCash)}
-            note="QR, card and bank"
+            note="Persisted chip buy-ins"
             icon="💳"
             tone="cyan"
           />
           <SummaryCard
             label="Cash Received"
             value={formatNpr(summary.cashReceived)}
-            note="Current cashier session"
+            note="Persisted chip buy-ins"
             icon="👤"
             tone="slate"
           />

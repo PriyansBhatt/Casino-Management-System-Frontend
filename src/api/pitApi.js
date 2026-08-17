@@ -36,6 +36,83 @@ const saveTables = () => saveStorage(tablesStorageKey, mockTables)
 const saveSessions = () => saveStorage(sessionsStorageKey, mockSessions)
 
 export const pitApi = {
+  getAuthoritativeTables: async () => {
+    const response = await axiosInstance.get('/pit-tables', { skipUnauthorizedRedirect: true })
+    return Array.isArray(response.data) ? response.data : []
+  },
+
+  getAuthoritativeTable: async (tableId) => {
+    const response = await axiosInstance.get(`/pit-tables/${tableId}`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data
+  },
+
+  createAuthoritativeTable: async (payload) => {
+    const response = await axiosInstance.post('/pit-tables', payload, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data
+  },
+
+  getAssignedPlayers: async (tableId) => {
+    const response = await axiosInstance.get(`/pit/tables/${tableId}/players`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data || []
+  },
+
+  getPlayerHistory: async (tableId) => {
+    const response = await axiosInstance.get(`/pit/tables/${tableId}/players/history`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data || []
+  },
+
+  getTableReconciliation: async (tableId) => {
+    const response = await axiosInstance.get(`/pit-tables/${tableId}/reconciliation`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data
+  },
+
+  closeAuthoritativeTable: async (tableId, closingFloat) => {
+    const response = await axiosInstance.put(`/pit-tables/${tableId}/close`, null, {
+      params: { closingFloat },
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data
+  },
+
+  assignPlayer: async (tableId, payload) => {
+    const response = await axiosInstance.post(`/pit/tables/${tableId}/players`, payload, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  leavePlayer: async (tableId, assignmentId) => {
+    const response = await axiosInstance.post(
+      `/pit/tables/${tableId}/players/${assignmentId}/leave`, {},
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data?.data
+  },
+
+  createVerifiedGamingResult: async (payload) => {
+    const response = await axiosInstance.post('/verified-gaming-results', payload, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  getVerifiedGamingResults: async (customerSessionId) => {
+    const response = await axiosInstance.get(
+      `/verified-gaming-results/session/${customerSessionId}`,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data?.data || []
+  },
   getTables: async (filters = {}) => {
     if (isMockPitEnabled()) {
       await wait()
