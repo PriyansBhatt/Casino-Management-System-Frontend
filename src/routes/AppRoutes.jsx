@@ -108,6 +108,7 @@ import AccountsReports from '../pages/accounts/AccountsReports'
 import AuditLogs from '../pages/audit/AuditLogs'
 import AuditLogDetails from '../pages/audit/AuditLogDetails'
 import ManagementAnalytics from '../pages/analytics/ManagementAnalytics'
+import RunningFundsReport from '../pages/reports/RunningFundsReport'
 
 // ============================================================
 // ADMIN / SETTINGS
@@ -618,7 +619,12 @@ const AppRoutes = () => {
 
       <Route
         path="/reports"
-        element={protectedPage(<ManagementAnalytics />)}
+        element={protectedPage(<RunningFundsReport />)}
+      />
+
+      <Route
+        path="/reports/running-funds"
+        element={protectedPage(<RunningFundsReport />)}
       />
 
       <Route

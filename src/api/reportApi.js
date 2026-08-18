@@ -64,6 +64,14 @@ const summarizeTransactions = (transactions) => {
 }
 
 export const reportApi = {
+  getRunningFundsReport: async (businessDate) => {
+    const response = await axiosInstance.get('/reports/running-funds', {
+      params: businessDate ? { businessDate } : {},
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
   getDailyBusinessReport: async (filters = {}) => {
     if (isMockReportsEnabled()) {
       await wait()
@@ -160,6 +168,7 @@ export const reportApi = {
 }
 
 export const getDailyBusinessReport = reportApi.getDailyBusinessReport
+export const getRunningFundsReport = reportApi.getRunningFundsReport
 export const getCustomerTransactionReport = reportApi.getCustomerTransactionReport
 export const getTransactionReport = reportApi.getTransactionReport
 export const getLosingReturnPreview = reportApi.getLosingReturnPreview
