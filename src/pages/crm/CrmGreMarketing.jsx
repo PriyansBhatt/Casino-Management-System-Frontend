@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import BonusManagement from './BonusManagement'
 
 const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
 
@@ -686,6 +687,7 @@ const CrmGreMarketing = () => {
     'Hotel Booking',
     'Vehicle Assignment',
     'Gifts & Services',
+    'Bonus Management',
     'Food (F&B) Requests',
     'Ticket Booking',
     'Service Records',
@@ -763,6 +765,8 @@ const CrmGreMarketing = () => {
           updateBookingStatus={updateBookingStatus}
         />
       )}
+
+      {activeTab === 'Bonus Management' && <BonusManagement />}
 
       {[
         'Vehicle Assignment',
