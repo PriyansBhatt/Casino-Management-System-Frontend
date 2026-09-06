@@ -54,7 +54,6 @@ import LosingReturnPreview from '../pages/reports/LosingReturnPreview'
 
 import TableList from '../pages/pit/TableList'
 import TableSessionDetails from '../pages/pit/TableSessionDetails'
-import OpenTableSession from '../pages/pit/OpenTableSession'
 import CloseTableSession from '../pages/pit/CloseTableSession'
 import TableReports from '../pages/pit/TableReports'
 import SlotMachineGaming from '../pages/pit/SlotMachineGaming'
@@ -405,7 +404,7 @@ const AppRoutes = () => {
 
       <Route
         path="/pit/tables/new"
-        element={protectedPage(<OpenTableSession />)}
+        element={<Navigate to="/pit/tables" replace />}
       />
 
       <Route

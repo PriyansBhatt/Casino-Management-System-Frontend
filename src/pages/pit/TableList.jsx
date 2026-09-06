@@ -14,6 +14,10 @@ const nowTime = () =>
     hour12: false,
   })
 
+const chipDenominations = [500, 1000, 5000, 10000, 25000]
+const emptyOpeningQuantities = () =>
+  Object.fromEntries(chipDenominations.map((value) => [value, 0]))
+
 const initialTables = [
   {
     id: 'T-BAC-1',
@@ -152,16 +156,6 @@ const initialTables = [
   },
 ]
 
-const emptySessionForm = {
-  tableId: '',
-  name: '',
-  gameType: 'Baccarat',
-  dealer: '',
-  recorder: '',
-  supervisor: '',
-  openingFloat: '',
-}
-
 const inputClass =
   'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100'
 
@@ -177,12 +171,12 @@ const GamingFloorPitOverview = () => {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [openingQuantities, setOpeningQuantities] = useState(emptyOpeningQuantities)
+  const [openingRemarks, setOpeningRemarks] = useState('')
+  const [openingRequest, setOpeningRequest] = useState({ signature: null, key: null })
 
   const [selectedTable, setSelectedTable] = useState(null)
   const [showFloorMap, setShowFloorMap] = useState(false)
-  const [showNewSession, setShowNewSession] = useState(false)
-  const [sessionForm, setSessionForm] = useState(emptySessionForm)
-  const [formErrors, setFormErrors] = useState({})
   const [toast, setToast] = useState(null)
 
   const filteredTables = useMemo(() => {
@@ -195,7 +189,6 @@ const GamingFloorPitOverview = () => {
         table.name.toLowerCase().includes(query) ||
         table.gameType.toLowerCase().includes(query) ||
         table.dealer.toLowerCase().includes(query) ||
-        table.recorder.toLowerCase().includes(query) ||
         table.supervisor.toLowerCase().includes(query)
 
       const gameMatch =
@@ -244,26 +237,28 @@ const GamingFloorPitOverview = () => {
     window.setTimeout(() => setToast(null), 2800)
   }
 
-  const mapTable = (table, playerCount = 0) => ({
-    id: table.id,
+  const mapTable = (table) => {
+    const unavailable = table.status === 'NOT_OPENED' || !table.operationId
+    const displayStaff = (staff) => staff?.displayName || staff?.username || 'Not assigned'
+    return {
+    id: table.physicalTableId,
+    physicalTableId: table.physicalTableId,
+    operationId: table.operationId,
     code: table.tableCode,
     name: table.tableName,
     gameType: table.gameType,
-    dealer: 'Not assigned',
-    recorder: 'Not available',
-    supervisor: 'Not assigned',
-    players: playerCount,
+    dealer: unavailable ? 'Not available' : displayStaff(table.activeDealer),
+    supervisor: unavailable ? 'Not available' : displayStaff(table.activeSupervisor),
+    players: Number(table.currentPlayers || 0),
     openingFloat: Number(table.openingFloat || 0),
-    chipIn: 0,
-    winsPaid: 0,
-    lossesCollected: 0,
+    chipIn: Number(table.chipIn || 0),
+    winsPaid: Number(table.verifiedWins || 0),
+    lossesCollected: Number(table.verifiedLosses || 0),
     status: table.status,
-    since: table.openedAt
-      ? new Date(table.openedAt).toLocaleTimeString([], {
-          hour: '2-digit', minute: '2-digit', hour12: false,
-        })
-      : 'Unavailable',
-  })
+    businessDate: table.businessDate,
+    since: table.operationId ? 'Current Business Date' : 'Not opened today',
+    }
+  }
 
   const loadAuthoritativeTables = async () => {
     setLoading(true)
@@ -273,10 +268,7 @@ const GamingFloorPitOverview = () => {
         pitApi.getAuthoritativeTables(),
         receptionApi.getCurrentOpenBusinessDate(),
       ])
-      const playerLists = await Promise.all(
-        realTables.map((table) => pitApi.getAssignedPlayers(table.id)),
-      )
-      setTables(realTables.map((table, index) => mapTable(table, playerLists[index].length)))
+      setTables(realTables.map(mapTable))
       setBusinessDate(openBusinessDate?.businessDate || 'Not open')
     } catch (error) {
       setTables([])
@@ -308,7 +300,6 @@ const GamingFloorPitOverview = () => {
       'Table Name',
       'Game Type',
       'Dealer',
-      'Recorder',
       'Supervisor',
       'Players',
       'Opening Float',
@@ -325,7 +316,6 @@ const GamingFloorPitOverview = () => {
       table.name,
       table.gameType,
       table.dealer,
-      table.recorder,
       table.supervisor,
       table.players,
       table.openingFloat,
@@ -357,7 +347,58 @@ const GamingFloorPitOverview = () => {
   }
 
   const openTablePage = (table) => {
-    navigate(`/pit/tables/${table.id}`)
+    if (table.operationId) navigate(`/pit/tables/${table.operationId}`)
+    else {
+      setOpeningQuantities(emptyOpeningQuantities())
+      setOpeningRemarks('')
+      setOpeningRequest({ signature: null, key: null })
+      setSelectedTable(table)
+    }
+  }
+
+  const openingTotal = chipDenominations.reduce(
+    (total, denomination) =>
+      total + denomination * Number(openingQuantities[denomination] || 0),
+    0,
+  )
+
+  const openPhysicalTable = async () => {
+    if (!selectedTable || selectedTable.operationId || openingTotal <= 0) return
+    const denominations = Object.fromEntries(
+      chipDenominations
+        .filter((value) => Number(openingQuantities[value]) > 0)
+        .map((value) => [value, Number(openingQuantities[value])]),
+    )
+    const signature = JSON.stringify({
+      physicalTableId: selectedTable.physicalTableId,
+      denominations,
+      remarks: openingRemarks.trim(),
+    })
+    let request = openingRequest
+    if (request.signature !== signature) {
+      if (!globalThis.crypto?.randomUUID) {
+        showToast('Secure request processing is unavailable in this browser.', 'error')
+        return
+      }
+      request = { signature, key: globalThis.crypto.randomUUID() }
+      setOpeningRequest(request)
+    }
+    setSubmitting(true)
+    try {
+      const operation = await pitApi.openAuthoritativeTable(selectedTable.physicalTableId, {
+        denominations,
+        remarks: openingRemarks.trim() || null,
+        idempotencyKey: request.key,
+      })
+      await loadAuthoritativeTables()
+      setSelectedTable(null)
+      showToast(`${operation.tableName} opened with authoritative physical custody.`)
+      navigate(`/pit/tables/${operation.id}`)
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const updateTableStatus = (tableId, status) => {
@@ -410,52 +451,6 @@ const GamingFloorPitOverview = () => {
     )
   }
 
-  const validateSession = () => {
-    const errors = {}
-
-    if (!sessionForm.tableId.trim()) errors.tableId = 'Table ID is required.'
-    if (!sessionForm.name.trim()) errors.name = 'Table name is required.'
-    if (
-      sessionForm.openingFloat === '' ||
-      Number(sessionForm.openingFloat) < 0
-    ) {
-      errors.openingFloat = 'Enter a valid opening float.'
-    }
-
-    const duplicateId = tables.some(
-      (table) =>
-        table.code.toLowerCase() === sessionForm.tableId.trim().toLowerCase(),
-    )
-
-    if (duplicateId) errors.tableId = 'This table ID already exists.'
-
-    setFormErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const createSession = async () => {
-    if (!validateSession()) return
-    setSubmitting(true)
-    try {
-      const created = await pitApi.createAuthoritativeTable({
-        tableCode: sessionForm.tableId.trim(),
-        tableName: sessionForm.name.trim(),
-        gameType: sessionForm.gameType,
-        openingFloat: Number(sessionForm.openingFloat),
-      })
-      await loadAuthoritativeTables()
-      setSessionForm(emptySessionForm)
-      setFormErrors({})
-      setShowNewSession(false)
-      showToast(`${created.tableName} opened for Business Date ${created.businessDate}.`)
-      navigate(`/pit/tables/${created.id}`)
-    } catch (error) {
-      showToast(getErrorMessage(error), 'error')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   return (
     <div className="space-y-5 text-slate-900">
       <section className="flex flex-col gap-4 border-b border-slate-200 pb-5 xl:flex-row xl:items-end xl:justify-between">
@@ -497,17 +492,6 @@ const GamingFloorPitOverview = () => {
             ⟳ Refresh
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSessionForm(emptySessionForm)
-              setFormErrors({})
-              setShowNewSession(true)
-            }}
-            className="h-11 rounded-xl bg-amber-400 px-5 text-sm font-black text-slate-950 transition hover:bg-amber-300"
-          >
-            + Start New Table Session
-          </button>
         </div>
       </section>
 
@@ -562,7 +546,7 @@ const GamingFloorPitOverview = () => {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search table, game, dealer, recorder or supervisor..."
+              placeholder="Search table, game, dealer or supervisor..."
               className={inputClass}
             />
 
@@ -673,7 +657,7 @@ const GamingFloorPitOverview = () => {
                 {[
                   'Table',
                   'Game Type',
-                  'Dealer / Recorder',
+                  'Dealer',
                   'Supervisor',
                   'Players',
                   'Opening Float',
@@ -725,9 +709,6 @@ const GamingFloorPitOverview = () => {
                     <td className="px-4 py-4">
                       <p className="text-sm font-bold text-slate-800">
                         {table.dealer}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {table.recorder}
                       </p>
                     </td>
 
@@ -791,9 +772,11 @@ const GamingFloorPitOverview = () => {
                         <button
                           type="button"
                           onClick={() => openTablePage(table)}
-                          className="rounded-lg bg-sky-500 px-3 py-2 text-xs font-black text-white hover:bg-sky-600"
+                          className="min-h-11 rounded-lg bg-sky-500 px-3 py-2 text-xs font-black text-white hover:bg-sky-600"
                         >
-                          Open Table
+                          {table.operationId
+                            ? table.status === 'OPEN' ? 'Open / Manage Table' : "View Today's Closed Operation"
+                            : 'Open Table'}
                         </button>
 
                         <button
@@ -863,15 +846,12 @@ const GamingFloorPitOverview = () => {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailCard label="Dealer" value={selectedTable.dealer} />
-                <DetailCard label="Recorder" value={selectedTable.recorder} />
                 <DetailCard
                   label="Supervisor"
                   value={selectedTable.supervisor}
                 />
-                <DetailCard
-                  label="Opening Float"
-                  value={money(selectedTable.openingFloat)}
-                />
+                <DetailCard label="Opening Float" value={selectedTable.operationId
+                  ? money(selectedTable.openingFloat) : 'Not established'} />
                 <DetailCard
                   label="Chip-In Today"
                   value={money(selectedTable.chipIn)}
@@ -891,6 +871,45 @@ const GamingFloorPitOverview = () => {
                   )}
                 />
               </div>
+
+              {!selectedTable.operationId && (
+                <div className="space-y-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div>
+                    <p className="text-sm font-black text-amber-950">Opening Physical Chip Custody</p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      Enter the exact denominations to transfer from CAGE custody. Historical floats are not reused.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {chipDenominations.map((denomination) => (
+                      <label key={denomination} className="flex items-center justify-between rounded-lg bg-white p-3">
+                        <span className="text-sm font-black">{money(denomination)}</span>
+                        <input type="number" min="0" step="1"
+                          value={openingQuantities[denomination]}
+                          onChange={(event) => {
+                            setOpeningQuantities((current) => ({
+                              ...current,
+                              [denomination]: Math.max(0, Math.trunc(Number(event.target.value) || 0)),
+                            }))
+                            setOpeningRequest({ signature: null, key: null })
+                          }}
+                          className="h-10 w-24 rounded-lg border border-slate-200 text-center font-black" />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="rounded-xl bg-slate-950 p-4 text-white">
+                    <p className="text-xs font-bold uppercase tracking-wider">Calculated Opening Float</p>
+                    <p className="mt-1 text-2xl font-black">{money(openingTotal)}</p>
+                  </div>
+                  <textarea value={openingRemarks}
+                    onChange={(event) => {
+                      setOpeningRemarks(event.target.value)
+                      setOpeningRequest({ signature: null, key: null })
+                    }}
+                    maxLength={500} rows={2} placeholder="Optional opening remarks"
+                    className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:border-amber-400" />
+                </div>
+              )}
 
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -927,147 +946,12 @@ const GamingFloorPitOverview = () => {
 
               <button
                 type="button"
-                onClick={() => openTablePage(selectedTable)}
+                onClick={() => selectedTable.operationId
+                  ? openTablePage(selectedTable) : openPhysicalTable()}
+                disabled={submitting || (!selectedTable.operationId && openingTotal <= 0)}
                 className="rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-black text-white hover:bg-sky-600"
               >
-                Open Full Table
-              </button>
-            </div>
-          </div>
-        </ModalOverlay>
-      )}
-
-      {showNewSession && (
-        <ModalOverlay onClose={() => setShowNewSession(false)}>
-          <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <ModalHeader
-              title="Start New Table Session"
-              description="Create a new operational table session for the selected business date."
-              onClose={() => setShowNewSession(false)}
-            />
-
-            <div className="max-h-[72vh] overflow-y-auto p-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  label="Table ID"
-                  value={sessionForm.tableId}
-                  placeholder="Example: T-BAC-4"
-                  error={formErrors.tableId}
-                  onChange={(value) =>
-                    setSessionForm((current) => ({
-                      ...current,
-                      tableId: value,
-                    }))
-                  }
-                />
-
-                <FormField
-                  label="Table Name"
-                  value={sessionForm.name}
-                  placeholder="Example: Baccarat Table 4"
-                  error={formErrors.name}
-                  onChange={(value) =>
-                    setSessionForm((current) => ({
-                      ...current,
-                      name: value,
-                    }))
-                  }
-                />
-
-                <label className="block">
-                  <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                    Game Type
-                  </span>
-                  <select
-                    value={sessionForm.gameType}
-                    onChange={(event) =>
-                      setSessionForm((current) => ({
-                        ...current,
-                        gameType: event.target.value,
-                      }))
-                    }
-                    className={inputClass}
-                  >
-                    <option>Baccarat</option>
-                    <option>Roulette</option>
-                    <option>Mini Flush</option>
-                    <option>Rented Flush</option>
-                  </select>
-                </label>
-
-                <FormField
-                  label="Opening Float"
-                  type="number"
-                  value={sessionForm.openingFloat}
-                  placeholder="Enter NPR amount"
-                  error={formErrors.openingFloat}
-                  onChange={(value) =>
-                    setSessionForm((current) => ({
-                      ...current,
-                      openingFloat: value,
-                    }))
-                  }
-                />
-
-                <FormField
-                  label="Dealer"
-                  value={sessionForm.dealer}
-                  placeholder="Dealer name"
-                  error={formErrors.dealer}
-                  onChange={(value) =>
-                    setSessionForm((current) => ({
-                      ...current,
-                      dealer: value,
-                    }))
-                  }
-                />
-
-                <FormField
-                  label="Recorder"
-                  value={sessionForm.recorder}
-                  placeholder="Recorder name"
-                  error={formErrors.recorder}
-                  onChange={(value) =>
-                    setSessionForm((current) => ({
-                      ...current,
-                      recorder: value,
-                    }))
-                  }
-                />
-
-                <div className="sm:col-span-2">
-                  <FormField
-                    label="Supervisor"
-                    value={sessionForm.supervisor}
-                    placeholder="Supervisor or pit boss"
-                    error={formErrors.supervisor}
-                    onChange={(value) =>
-                      setSessionForm((current) => ({
-                        ...current,
-                        supervisor: value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setShowNewSession(false)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={createSession}
-                disabled={submitting}
-                className="rounded-lg bg-amber-400 px-5 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300 disabled:opacity-50"
-              >
-                {submitting ? 'Starting...' : 'Start Session'}
+                {submitting ? 'Opening...' : selectedTable.operationId ? 'Open Full Table' : 'Open Table & Issue Float'}
               </button>
             </div>
           </div>
@@ -1234,39 +1118,6 @@ const DetailCard = ({ label, value }) => (
       {value}
     </p>
   </div>
-)
-
-const FormField = ({
-  label,
-  value,
-  onChange,
-  placeholder,
-  error,
-  type = 'text',
-}) => (
-  <label className="block">
-    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-      {label}
-      <span className="ml-1 text-red-500">*</span>
-    </span>
-
-    <input
-      type={type}
-      value={value}
-      min={type === 'number' ? 0 : undefined}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      className={`${inputClass} ${
-        error ? 'border-red-300 focus:border-red-500' : ''
-      }`}
-    />
-
-    {error && (
-      <span className="mt-1 block text-xs font-semibold text-red-600">
-        {error}
-      </span>
-    )}
-  </label>
 )
 
 const ModalHeader = ({ title, description, onClose }) => (

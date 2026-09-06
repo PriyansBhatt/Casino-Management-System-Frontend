@@ -48,8 +48,8 @@ export const pitApi = {
     return response.data
   },
 
-  createAuthoritativeTable: async (payload) => {
-    const response = await axiosInstance.post('/pit-tables', payload, {
+  openAuthoritativeTable: async (physicalTableId, payload) => {
+    const response = await axiosInstance.post(`/pit-tables/physical/${physicalTableId}/open`, payload, {
       skipUnauthorizedRedirect: true,
     })
     return response.data
@@ -74,6 +74,51 @@ export const pitApi = {
       skipUnauthorizedRedirect: true,
     })
     return response.data
+  },
+
+  getPitStaffCandidates: async (role) => {
+    const response = await axiosInstance.get('/pit-tables/staff/candidates', {
+      params: { role },
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data || []
+  },
+
+  getActiveTableStaff: async (tableId) => {
+    const response = await axiosInstance.get(`/pit-tables/${tableId}/staff`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data || []
+  },
+
+  getTableStaffHistory: async (tableId) => {
+    const response = await axiosInstance.get(`/pit-tables/${tableId}/staff/history`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data || []
+  },
+
+  assignTableStaff: async (tableId, payload) => {
+    const response = await axiosInstance.post(`/pit-tables/${tableId}/staff`, payload, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  endTableStaffAssignment: async (tableId, assignmentId, payload) => {
+    const response = await axiosInstance.post(
+      `/pit-tables/${tableId}/staff/${assignmentId}/end`, payload,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data?.data
+  },
+
+  handoverTableStaff: async (tableId, assignmentRole, payload) => {
+    const response = await axiosInstance.post(
+      `/pit-tables/${tableId}/staff/${assignmentRole}/handover`, payload,
+      { skipUnauthorizedRedirect: true },
+    )
+    return response.data?.data
   },
 
   closeAuthoritativeTable: async (tableId, closingFloat) => {

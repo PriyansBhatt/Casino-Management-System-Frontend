@@ -7,12 +7,13 @@ import useBusinessStatus from '../../hooks/useBusinessStatus'
 import useToast from '../../hooks/useToast'
 import { getErrorMessage } from '../../utils/errorUtils'
 import VerifiedTablePlayers from './VerifiedTablePlayers'
+import PitStaffAssignmentPanel from '../../components/pit/PitStaffAssignmentPanel'
 
 const money = (value) => value == null
   ? 'Unavailable'
   : `NPR ${Number(value).toLocaleString('en-IN')}`
 
-const closeRoles = [ROLES.PIT_SUPERVISOR, ROLES.DEALER, ROLES.SUPER_ADMIN]
+const closeRoles = [ROLES.PIT_SUPERVISOR, ROLES.SUPER_ADMIN]
 
 const TableSessionDetails = () => {
   const navigate = useNavigate()
@@ -29,6 +30,7 @@ const TableSessionDetails = () => {
   const [showClose, setShowClose] = useState(false)
   const [closingFloat, setClosingFloat] = useState('')
   const [busy, setBusy] = useState(false)
+  const [staff, setStaff] = useState(null)
 
   const loadTable = useCallback(async () => {
     const value = await pitApi.getAuthoritativeTable(tableId)
@@ -91,6 +93,11 @@ const TableSessionDetails = () => {
 
   const isOpen = table.status === 'OPEN'
   const canClose = closeRoles.includes(user?.role)
+  const activeDealer = staff?.find((entry) => entry.assignmentRole === 'DEALER')
+  const activeSupervisor = staff?.find((entry) => entry.assignmentRole === 'PIT_SUPERVISOR')
+  const staffLabel = staff === null
+    ? 'Unavailable'
+    : `Dealer: ${activeDealer?.fullName || activeDealer?.username || 'Not assigned'} · Supervisor: ${activeSupervisor?.fullName || activeSupervisor?.username || 'Not assigned'}`
 
   return <div className="space-y-6 pb-12">
     <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -98,13 +105,15 @@ const TableSessionDetails = () => {
         <div className="flex items-start gap-3"><button type="button" onClick={() => navigate('/pit/tables')} className="rounded-xl border border-slate-200 px-3 py-2 font-black text-slate-600 hover:bg-slate-50">←</button><div><p className="text-xs font-black uppercase tracking-[0.16em] text-amber-600">Gaming Floor</p><h1 className="mt-1 text-3xl font-black text-slate-950">{table.tableName}</h1><p className="mt-1 text-sm font-semibold text-slate-500">{table.tableCode} · {table.gameType}</p></div></div>
         <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setShowReconciliation((value) => !value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50">Table Reconciliation</button>{isOpen && canClose && <button type="button" onClick={() => { setActionError(''); setShowClose(true) }} disabled={isSystemLocked} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-40">Close Table</button>}<span className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>{table.status}</span></div>
       </div>
-      <div className="grid gap-4 bg-slate-50 p-5 sm:grid-cols-2 lg:grid-cols-4"><HeaderInfo label="Business Date" value={table.businessDate}/><HeaderInfo label="Opening Float" value={money(table.openingFloat)}/><HeaderInfo label="Opened At" value={table.openedAt ? new Date(table.openedAt).toLocaleString() : 'Unavailable'}/><HeaderInfo label="Staff Assignment" value="Not assigned"/></div>
+      <div className="grid gap-4 bg-slate-50 p-5 sm:grid-cols-2 lg:grid-cols-4"><HeaderInfo label="Business Date" value={table.businessDate}/><HeaderInfo label="Opening Float" value={money(table.openingFloat)}/><HeaderInfo label="Opened At" value={table.openedAt ? new Date(table.openedAt).toLocaleString() : 'Unavailable'}/><HeaderInfo label="Staff Assignment" value={staffLabel}/></div>
     </header>
 
     {showReconciliation && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><h2 className="text-xl font-black text-slate-950">Table Reconciliation</h2><p className="mt-1 text-sm text-slate-500">Backend-derived table float reconciliation.</p></div><button type="button" onClick={() => setShowReconciliation(false)} className="text-sm font-bold text-slate-500">Close</button></div><div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><HeaderInfo label="Opening Float" value={money(reconciliation?.openingFloat)}/><HeaderInfo label="Closing Float" value={money(reconciliation?.closingFloat)}/><HeaderInfo label="Table Difference" value={money(reconciliation?.tableDifference)}/><HeaderInfo label="Reconciliation Status" value={reconciliation?.tableStatus}/></div></section>}
 
     {!isOpen && <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700">This table is CLOSED. Assignments and result mutations are disabled; historical players and verified results remain available.</div>}
     {isSystemLocked && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">Casino operations are currently locked. Table mutations are disabled.</div>}
+
+    <PitStaffAssignmentPanel tableId={table.id} tableOpen={isOpen} onStaffChange={setStaff} />
 
     <VerifiedTablePlayers key={`${table.id}-${table.status}`} tableId={table.id} onSummaryChange={setSummary}/>
 
