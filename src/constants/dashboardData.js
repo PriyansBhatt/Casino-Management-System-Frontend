@@ -105,7 +105,7 @@ export const DASHBOARD_DATA = {
       'Buy-in, cash-out, wallet, and daily report actions will respect System Lock.',
     ],
   },
-  [ROLES.PIT_BOSS]: {
+  [ROLES.PIT_SUPERVISOR]: {
     title: 'Pit Boss Dashboard',
     description: 'Monitor table sessions and lock-aware pit operations.',
     stats: [

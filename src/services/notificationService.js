@@ -179,7 +179,7 @@ export async function generateSystemNotificationsForUser(user, businessStatus) {
       })
     }
 
-    if (user.role === ROLES.PIT_BOSS) {
+    if (user.role === ROLES.PIT_SUPERVISOR) {
       const openSessions = countWhere(tableSessions, (item) => item.status === TABLE_SESSION_STATUSES.OPEN)
       const pendingReview = countWhere(tableSessions, (item) => item.status === TABLE_SESSION_STATUSES.PENDING_REVIEW)
       if (openSessions > 0) {
@@ -189,7 +189,7 @@ export async function generateSystemNotificationsForUser(user, businessStatus) {
           message: `${openSessions} table session(s) are currently open.`,
           type: NOTIFICATION_TYPES.PIT,
           priority: NOTIFICATION_PRIORITIES.MEDIUM,
-          targetRoles: [ROLES.PIT_BOSS],
+          targetRoles: [ROLES.PIT_SUPERVISOR],
         })
       }
       if (pendingReview > 0) {
@@ -199,7 +199,7 @@ export async function generateSystemNotificationsForUser(user, businessStatus) {
           message: `${pendingReview} table session(s) require review.`,
           type: NOTIFICATION_TYPES.PIT,
           priority: NOTIFICATION_PRIORITIES.HIGH,
-          targetRoles: [ROLES.PIT_BOSS],
+          targetRoles: [ROLES.PIT_SUPERVISOR],
         })
       }
     }

@@ -56,6 +56,8 @@ export const ROUTE_PERMISSIONS = {
   '/cashier/daily-report': CASHIER_ROLES,
   '/cashier/reconciliation': CASHIER_RECONCILIATION_ROLES,
   '/pit/tables': PIT_ROLES,
+  '/pit/tables/:tableId': PIT_ROLES,
+  '/pit/tables/:tableId/close': [ROLES.PIT_SUPERVISOR, ROLES.SUPER_ADMIN],
   '/pit/open-sessions': PIT_ROLES,
   '/pit/close-sessions': PIT_ROLES,
   '/pit/table-reports': PIT_ROLES,

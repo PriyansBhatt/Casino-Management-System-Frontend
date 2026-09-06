@@ -30,7 +30,7 @@ const mockUsers = [
     username: 'pitboss',
     password: 'pitboss123',
     fullName: 'Pit Boss User',
-    role: ROLES.PIT_BOSS,
+    role: ROLES.PIT_SUPERVISOR,
   },
   {
     username: 'store',

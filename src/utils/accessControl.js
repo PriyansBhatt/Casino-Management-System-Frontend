@@ -90,7 +90,8 @@ export function getDefaultRouteForRole(role) {
       return '/reception'
     case ROLES.CASHIER:
       return '/cashier/buy-in'
-    case ROLES.PIT_BOSS:
+    case ROLES.PIT_SUPERVISOR:
+    case ROLES.DEALER:
       return '/pit/tables'
     case ROLES.STORE_KEEPER:
       return '/store/department-requests'

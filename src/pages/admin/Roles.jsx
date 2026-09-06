@@ -11,7 +11,7 @@ const roleDetails = {
   [ROLES.ADMIN]: ['Admin and operational configuration', 'Admin, configuration, oversight'],
   [ROLES.RECEPTIONIST]: ['Customer registration and search', 'Reception'],
   [ROLES.CASHIER]: ['Buy-in, cash-out, wallet transactions', 'Cashier'],
-  [ROLES.PIT_BOSS]: ['Table/session operations', 'Pit/Table'],
+  [ROLES.PIT_SUPERVISOR]: ['Table/session operations', 'Pit/Table'],
   [ROLES.STORE_KEEPER]: ['Store requests, stock, delivery', 'Store'],
   [ROLES.PROCUREMENT]: ['Procurement list, quotations, purchase orders', 'Procurement'],
   [ROLES.ACCOUNTS]: ['Bills, expenses, payments, accounts reports', 'Accounts'],
