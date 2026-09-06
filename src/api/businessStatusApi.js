@@ -21,7 +21,13 @@ export const businessStatusApi = {
     }
 
     const response = await axiosInstance.get('/business-status/current')
-    return response.data
+    const status = response.data?.data || response.data
+    return {
+      ...status,
+      isLocked: Boolean(status?.systemLocked),
+      systemStatus: status?.systemLocked ? 'LOCKED' : 'OPEN',
+      lastUpdatedAt: status?.serverTimestamp,
+    }
   },
 
   requestSystemUnlock: async (payload) => {
