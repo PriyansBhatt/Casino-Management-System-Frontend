@@ -211,18 +211,22 @@ const CashOut = () => {
       setErrorMessage('Payment reference is required for BANK, QR, and CARD.')
       return
     }
+    const submittedDenominations = Object.fromEntries(
+      Object.entries(chipQuantities).filter(([, quantity]) => Number(quantity) > 0),
+    )
     const signature = JSON.stringify({
       customerId: selectedCustomer.id,
       customerSessionId: activeSession.id,
       cashPaid: numericAmount,
       totalChipValueReturned: denominationTotal,
+      denominations: submittedDenominations,
       paymentMode: data.paymentMethod,
       paymentReference: data.paymentReference?.trim() || null,
     })
     if (submissionRef.current.signature !== signature) {
       submissionRef.current = { key: createIdempotencyKey(), signature }
     }
-    setPendingCashOut({ ...data, numericAmount, denominationTotal, signature })
+    setPendingCashOut({ ...data, numericAmount, denominationTotal, denominations: submittedDenominations, signature })
   }
 
   const confirmCashOut = async () => {
@@ -236,6 +240,7 @@ const CashOut = () => {
         customerSessionId: activeSession.id,
         cashPaid: data.numericAmount,
         totalChipValueReturned: data.denominationTotal,
+        denominations: data.denominations,
         paymentMode: data.paymentMethod,
         idempotencyKey: submissionRef.current.key,
         ...(data.paymentReference?.trim() ? { paymentReference: data.paymentReference.trim() } : {}),

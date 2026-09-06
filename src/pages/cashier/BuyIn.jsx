@@ -850,6 +850,11 @@ const CashCollectionBuyIn = () => {
       amountReceived,
       paymentMode: paymentModeMap[chipForm.paymentMethod],
       totalChipValueIssued: chipDenominationTotal,
+      denominations: Object.fromEntries(
+        Object.entries(chipForm.denominations)
+          .filter(([, quantity]) => Number(quantity) > 0)
+          .map(([denomination, quantity]) => [denomination, Number(quantity)]),
+      ),
       paymentReference: requiresReference(chipForm.paymentMethod)
         ? chipForm.reference.trim()
         : null,

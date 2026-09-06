@@ -39,11 +39,13 @@ const CashierReconciliation = () => {
   const { isSystemLocked } = useBusinessStatus()
   const { showToast } = useToast()
   const [record, setRecord] = useState(null)
-  const [openingCash, setOpeningCash] = useState('')
+  const [openingBalance, setOpeningBalance] = useState(null)
+  const [openingBalanceInput, setOpeningBalanceInput] = useState('')
   const [denominations, setDenominations] = useState(emptyCounts)
   const [remarks, setRemarks] = useState('')
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
+  const [creatingOpeningBalance, setCreatingOpeningBalance] = useState(false)
   const [error, setError] = useState('')
   const [reviewRecords, setReviewRecords] = useState([])
   const keyRef = useRef(newKey())
@@ -56,10 +58,13 @@ const CashierReconciliation = () => {
     setLoading(true)
     setError('')
     try {
-      const data = await cashierApi.getCurrentCashierReconciliation()
+      const [data, currentOpeningBalance] = await Promise.all([
+        cashierApi.getCurrentCashierReconciliation(),
+        cashierApi.getCurrentCashierOpeningBalance(),
+      ])
       setRecord(data)
+      setOpeningBalance(currentOpeningBalance || null)
       if (data?.id) {
-        setOpeningCash(String(data.openingCash ?? ''))
         setDenominations({ ...emptyCounts, ...(data.denominations || {}) })
         setRemarks(data.remarks || '')
       }
@@ -83,13 +88,39 @@ const CashierReconciliation = () => {
     keyRef.current = newKey()
   }
 
-  const payload = () => ({ openingCash: Number(openingCash), denominations, remarks: remarks.trim() || null, idempotencyKey: keyRef.current })
+  const payload = () => ({ denominations, remarks: remarks.trim() || null, idempotencyKey: keyRef.current })
   const validate = () => {
-    if (openingCash === '' || !Number.isFinite(Number(openingCash)) || Number(openingCash) < 0) {
-      setError('Enter a valid opening cash amount.')
+    if (!openingBalance) {
+      setError('Opening Cash must be established before reconciliation can be calculated or submitted.')
       return false
     }
     return true
+  }
+  const establishOpeningBalance = async () => {
+    const amount = Number(openingBalanceInput)
+    if (openingBalanceInput === '' || !Number.isFinite(amount) || amount < 0) {
+      setError('Enter a valid non-negative Opening Cash amount.')
+      return
+    }
+    const businessDate = record?.businessDate || 'the current Business Date'
+    if (!window.confirm(`Set opening cash to ${money(amount)} for Business Date ${businessDate}? This becomes the authoritative opening balance for this cashier.`)) return
+    if (isSystemLocked) {
+      setError('System is locked. Opening Cash cannot be established.')
+      return
+    }
+    setCreatingOpeningBalance(true); setError('')
+    try {
+      await cashierApi.createCurrentCashierOpeningBalance(amount)
+      showToast({ type: 'success', title: 'Opening Cash established', message: `${money(amount)} is now authoritative for ${businessDate}.` })
+      setOpeningBalanceInput('')
+      await load()
+    } catch (requestError) {
+      const message = errorMessage(requestError, 'Unable to establish Opening Cash.')
+      setError(message)
+      showToast({ type: 'error', title: 'Opening Cash failed', message })
+    } finally {
+      setCreatingOpeningBalance(false)
+    }
   }
   const preview = async () => {
     if (!validate()) return
@@ -143,7 +174,7 @@ const CashierReconciliation = () => {
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <SummaryCard label="Opening Cash" value={money(record?.openingCash ?? (openingCash === '' ? null : openingCash))} />
+        <SummaryCard label="Opening Cash" value={money(record?.openingCash ?? openingBalance?.openingCashAmount)} detail={openingBalance ? 'Persisted authoritative balance' : record?.id ? 'Persisted reconciliation snapshot' : 'Not established'} />
         <SummaryCard label="Cash Received" value={money(record?.physicalCashReceived)} detail="Persisted CASH buy-ins" />
         <SummaryCard label="Cash Paid" value={money(record?.physicalCashPaid)} detail="Persisted CASH cash-outs" />
         <SummaryCard label="Expected Closing" value={money(record?.expectedClosingCash)} />
@@ -151,6 +182,16 @@ const CashierReconciliation = () => {
         <SummaryCard label="Variance" value={money(record?.variance)} detail={record?.status} />
       </section>
       <div className="grid gap-5 xl:grid-cols-3"><TenderCard title="Buy-In Tender Summary" tenders={record?.buyInTenders} /><TenderCard title="Cash-Out Tender Summary" tenders={record?.cashOutTenders} /><TenderCard title="Losing Return Tender Summary" tenders={record?.losingReturnTenders} /></div>
+
+      {!openingBalance && !record?.id && <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+        <h2 className="font-serif text-xl font-black text-slate-950">Opening Cash Required</h2>
+        <p className="mt-2 text-sm text-slate-700">Opening Cash must be established before reconciliation can calculate Expected Closing and Variance.</p>
+        {canSubmit ? <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="w-full max-w-xs"><span className="text-xs font-black uppercase tracking-wider text-slate-600">Opening Cash Amount (NPR)</span><input type="number" min="0" step="0.01" disabled={creatingOpeningBalance || isSystemLocked} value={openingBalanceInput} onChange={(event) => setOpeningBalanceInput(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 outline-none focus:border-amber-500 disabled:bg-slate-100" /></label>
+          <button type="button" disabled={creatingOpeningBalance || isSystemLocked} onClick={establishOpeningBalance} className="h-11 rounded-xl bg-amber-500 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{creatingOpeningBalance ? 'Setting…' : 'Set Opening Cash'}</button>
+          {isSystemLocked && <p className="w-full text-sm font-semibold text-red-700">System Lock must be cleared before Opening Cash can be established.</p>}
+        </div> : <p className="mt-4 text-sm font-semibold text-slate-600">Opening Cash has not been established. Director access is review-only.</p>}
+      </section>}
 
       {canReopen && reviewRecords.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="font-serif text-xl font-black text-slate-950">Current Business Date Submissions</h2><div className="mt-4 space-y-3">{reviewRecords.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4"><div><p className="font-bold text-slate-900">{item.cashierName || item.cashierUsername}</p><p className="text-xs text-slate-500">{item.status} · {item.lifecycleStatus} · {money(item.variance)}</p></div>{item.lifecycleStatus === 'SUBMITTED' && <button type="button" disabled={working || isSystemLocked} onClick={() => reopen(item)} className="rounded-xl border border-amber-400 px-4 py-2 text-sm font-black text-amber-700 disabled:opacity-50">Reopen Reconciliation</button>}</div>)}</div></section>}
 
@@ -167,8 +208,7 @@ const CashierReconciliation = () => {
             </label>
           ))}
         </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-[240px_1fr]">
-          <label><span className="text-xs font-black uppercase tracking-wider text-slate-500">Opening Cash</span><input type="number" min="0" step="0.01" disabled={submitted || !canSubmit} value={openingCash} onChange={(event) => { setOpeningCash(event.target.value); keyRef.current = newKey() }} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 outline-none focus:border-amber-400 disabled:bg-slate-100" /></label>
+        <div className="mt-5">
           <label><span className="text-xs font-black uppercase tracking-wider text-slate-500">Remarks</span><input maxLength="1000" disabled={submitted || !canSubmit} value={remarks} onChange={(event) => { setRemarks(event.target.value); keyRef.current = newKey() }} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 outline-none focus:border-amber-400 disabled:bg-slate-100" /></label>
         </div>
         <div className="mt-5 flex flex-wrap justify-end gap-3">

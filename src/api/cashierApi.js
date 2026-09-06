@@ -122,6 +122,22 @@ export const cashierApi = {
     return response.data?.data
   },
 
+  getCurrentCashierOpeningBalance: async () => {
+    const response = await axiosInstance.get('/cashier-opening-balances/current', {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  createCurrentCashierOpeningBalance: async (openingCashAmount) => {
+    const response = await axiosInstance.post(
+      '/cashier-opening-balances/current',
+      { openingCashAmount },
+      { skipUnauthorizedRedirect: true }
+    )
+    return response.data?.data
+  },
+
   previewCashierReconciliation: async (payload) => {
     const response = await axiosInstance.post('/cashier-reconciliation/preview', payload, {
       skipUnauthorizedRedirect: true,
