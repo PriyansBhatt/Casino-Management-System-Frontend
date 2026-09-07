@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import pitApi from '../../api/pitApi'
 import receptionApi from '../../api/receptionApi'
 import { getErrorMessage } from '../../utils/errorUtils'
+import useAuth from '../../hooks/useAuth'
+import { ROLES } from '../../constants/roles'
 
 const money = (value) =>
   `NPR ${Number(value || 0).toLocaleString('en-IN')}`
@@ -161,6 +163,8 @@ const inputClass =
 
 const GamingFloorPitOverview = () => {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isDealer = user?.role === ROLES.DEALER
 
   const [tables, setTables] = useState([])
   const [search, setSearch] = useState('')
@@ -356,6 +360,10 @@ const GamingFloorPitOverview = () => {
     }
   }
 
+  const enterTableMode = (table) => {
+    if (table.operationId) navigate(`/pit/tables/${table.operationId}/mode`)
+  }
+
   const openingTotal = chipDenominations.reduce(
     (total, denomination) =>
       total + denomination * Number(openingQuantities[denomination] || 0),
@@ -504,6 +512,15 @@ const GamingFloorPitOverview = () => {
         <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
           {loadError}
         </p>
+      )}
+
+      {!loading && !loadError && isDealer && tables.length === 0 && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
+          <h2 className="text-xl font-black text-slate-950">No active table assignment</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-600">
+            Wait for a Pit Supervisor to assign you to a table.
+          </p>
+        </section>
       )}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -771,10 +788,13 @@ const GamingFloorPitOverview = () => {
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() => openTablePage(table)}
+                          onClick={() => isDealer && table.operationId
+                            ? enterTableMode(table) : openTablePage(table)}
                           className="min-h-11 rounded-lg bg-sky-500 px-3 py-2 text-xs font-black text-white hover:bg-sky-600"
                         >
-                          {table.operationId
+                          {isDealer && table.operationId && table.status === 'OPEN'
+                            ? 'Enter Table Mode'
+                            : table.operationId
                             ? table.status === 'OPEN' ? 'Open / Manage Table' : "View Today's Closed Operation"
                             : 'Open Table'}
                         </button>

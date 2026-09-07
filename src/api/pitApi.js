@@ -48,6 +48,21 @@ export const pitApi = {
     return response.data
   },
 
+  getPitTableMode: async (operationId) => {
+    const response = await axiosInstance.get(`/pit-tables/${operationId}/mode`, {
+      skipUnauthorizedRedirect: true,
+    })
+    return response.data?.data
+  },
+
+  getEligiblePitTablePlayers: async (operationId, query) => {
+    const response = await axiosInstance.get(
+      `/pit-tables/${operationId}/eligible-players`,
+      { params: { query }, skipUnauthorizedRedirect: true },
+    )
+    return response.data?.data || []
+  },
+
   openAuthoritativeTable: async (physicalTableId, payload) => {
     const response = await axiosInstance.post(`/pit-tables/physical/${physicalTableId}/open`, payload, {
       skipUnauthorizedRedirect: true,
@@ -136,9 +151,9 @@ export const pitApi = {
     return response.data?.data
   },
 
-  leavePlayer: async (tableId, assignmentId) => {
+  leavePlayer: async (tableId, assignmentId, payload) => {
     const response = await axiosInstance.post(
-      `/pit/tables/${tableId}/players/${assignmentId}/leave`, {},
+      `/pit/tables/${tableId}/players/${assignmentId}/leave`, payload,
       { skipUnauthorizedRedirect: true },
     )
     return response.data?.data

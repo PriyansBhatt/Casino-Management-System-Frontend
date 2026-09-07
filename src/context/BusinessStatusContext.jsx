@@ -1,9 +1,11 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import businessStatusApi from '../api/businessStatusApi'
+import { useLocation } from 'react-router-dom'
 
 export const BusinessStatusContext = createContext(null)
 
 export const BusinessStatusProvider = ({ children }) => {
+  const location = useLocation()
   const [businessStatus, setBusinessStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -26,8 +28,12 @@ export const BusinessStatusProvider = ({ children }) => {
   }, [])
 
   useEffect(() => {
+    if (/^\/pit\/tables\/[^/]+\/mode$/.test(location.pathname)) {
+      setIsLoading(false)
+      return
+    }
     refreshBusinessStatus()
-  }, [refreshBusinessStatus])
+  }, [location.pathname, refreshBusinessStatus])
 
   const value = useMemo(
     () => ({

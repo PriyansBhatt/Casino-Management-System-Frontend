@@ -54,6 +54,7 @@ import LosingReturnPreview from '../pages/reports/LosingReturnPreview'
 
 import TableList from '../pages/pit/TableList'
 import TableSessionDetails from '../pages/pit/TableSessionDetails'
+import DealerTableMode from '../pages/pit/DealerTableMode'
 import CloseTableSession from '../pages/pit/CloseTableSession'
 import TableReports from '../pages/pit/TableReports'
 import SlotMachineGaming from '../pages/pit/SlotMachineGaming'
@@ -137,6 +138,10 @@ const protectedPage = (page) => (
   <ProtectedRoute>
     <MainLayout>{page}</MainLayout>
   </ProtectedRoute>
+)
+
+const protectedFocusedPage = (page) => (
+  <ProtectedRoute>{page}</ProtectedRoute>
 )
 
 // ============================================================
@@ -405,6 +410,11 @@ const AppRoutes = () => {
       <Route
         path="/pit/tables/new"
         element={<Navigate to="/pit/tables" replace />}
+      />
+
+      <Route
+        path="/pit/tables/:tableId/mode"
+        element={protectedFocusedPage(<DealerTableMode />)}
       />
 
       <Route
