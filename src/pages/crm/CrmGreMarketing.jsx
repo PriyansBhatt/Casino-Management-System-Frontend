@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import BonusManagement from './BonusManagement'
+import HotelBookingManagement from './HotelBookingManagement'
 
 const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
 
@@ -68,46 +69,7 @@ const initialGuests = [
   },
 ]
 
-const initialBookings = [
-  {
-    id: 'HB-2026-0721-001',
-    billNo: 'BILL-HB-2026-0721-001',
-    badge: '087',
-    cid: 'CID-000987',
-    customer: 'Raj Sharma',
-    category: 'VIP',
-    hotel: 'Summit Grand Hotel',
-    roomType: 'Deluxe King',
-    rooms: 1,
-    checkIn: '2026-07-21',
-    checkOut: '2026-07-23',
-    nights: 2,
-    estimatedCost: 48000,
-    receiptStatus: 'Receipt Returned',
-    verificationStatus: 'Verified',
-    accountsStatus: 'Ready for Accounts',
-    remarks: 'VIP guest · 2 nights stay with breakfast.',
-  },
-  {
-    id: 'HB-2026-0721-002',
-    billNo: 'BILL-HB-2026-0721-002',
-    badge: '112',
-    cid: 'CID-11245678',
-    customer: 'Daniel Smith',
-    category: 'VVIP',
-    hotel: 'Hotel Everest Crown',
-    roomType: 'Executive Suite',
-    rooms: 2,
-    checkIn: '2026-07-22',
-    checkOut: '2026-07-25',
-    nights: 3,
-    estimatedCost: 120000,
-    receiptStatus: 'Pending Return',
-    verificationStatus: 'Not Verified',
-    accountsStatus: 'Not Ready',
-    remarks: 'Airport pickup included.',
-  },
-]
+const initialBookings = []
 
 const initialRequests = [
   {
@@ -299,20 +261,15 @@ const CrmGreMarketing = () => {
     return bookings.filter((booking) => {
       const searchMatch =
         !query ||
-        booking.customer.toLowerCase().includes(query) ||
-        booking.cid.toLowerCase().includes(query) ||
-        booking.badge.includes(query) ||
-        booking.id.toLowerCase().includes(query) ||
-        booking.billNo.toLowerCase().includes(query)
+        [booking.customerName, booking.customerCode, booking.bookingCode, booking.hotelName]
+          .some((value) => String(value || '').toLowerCase().includes(query))
 
       const hotelMatch =
-        hotelFilter === 'All Hotels' || booking.hotel === hotelFilter
+        hotelFilter === 'All Hotels' || booking.hotelName === hotelFilter
 
       const statusMatch =
         bookingStatusFilter === 'All Statuses' ||
-        booking.verificationStatus === bookingStatusFilter ||
-        booking.accountsStatus === bookingStatusFilter ||
-        booking.receiptStatus === bookingStatusFilter
+        booking.status === bookingStatusFilter
 
       return searchMatch && hotelMatch && statusMatch
     })
@@ -361,7 +318,7 @@ const CrmGreMarketing = () => {
         ['Pending', 'Pending Approval'].includes(request.status),
       ).length,
       hotelRooms: bookings.reduce(
-        (total, booking) => total + Number(booking.rooms || 0),
+        (total, booking) => total + (['APPROVED', 'BOOKED', 'CHECKED_IN'].includes(booking.status) ? 1 : 0),
         0,
       ),
       vehicleToday: requests.filter(
@@ -657,15 +614,7 @@ const CrmGreMarketing = () => {
   }
 
   const openBookingForGuest = (guest = selectedGuest) => {
-    setBookingForm({
-      ...emptyBooking,
-      cid: guest?.cid || '',
-      badge: guest?.badge || '',
-      customer: guest?.name || '',
-      category: guest?.category || 'VIP',
-    })
-    setErrors({})
-    setModal('booking')
+    setActiveTab('Hotel Booking')
   }
 
   const openServiceForGuest = (serviceType, guest = selectedGuest) => {
@@ -749,21 +698,7 @@ const CrmGreMarketing = () => {
       )}
 
       {activeTab === 'Hotel Booking' && (
-        <HotelBookingView
-          stats={hotelStats}
-          bookings={filteredBookings}
-          search={bookingSearch}
-          setSearch={setBookingSearch}
-          hotelFilter={hotelFilter}
-          setHotelFilter={setHotelFilter}
-          statusFilter={bookingStatusFilter}
-          setStatusFilter={setBookingStatusFilter}
-          openBooking={() => openBookingForGuest()}
-          exportBookings={exportBookings}
-          selectedBooking={selectedBooking}
-          setSelectedBooking={setSelectedBooking}
-          updateBookingStatus={updateBookingStatus}
-        />
+        <HotelBookingManagement onBookingsChange={setBookings} />
       )}
 
       {activeTab === 'Bonus Management' && <BonusManagement />}
