@@ -113,7 +113,7 @@ const seedAuditLogs = () => [
     description: 'Table session opened by Pit Boss.',
     businessDate: '2083-03-04',
     performedBy: 'pitboss',
-    performedByRole: 'PIT_BOSS',
+    performedByRole: 'PIT_SUPERVISOR',
     entityType: 'TABLE_SESSION',
     entityId: 'TBL-001',
     oldValue: null,
