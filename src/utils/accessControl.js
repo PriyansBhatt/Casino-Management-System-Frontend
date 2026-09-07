@@ -15,6 +15,7 @@ const routePatternMatches = (pattern, pathname) => {
 }
 
 const RECEPTIONIST_ROUTE_PATTERNS = [
+  '/attendance',
   '/reception',
   '/reception/gate',
   '/reception/register',

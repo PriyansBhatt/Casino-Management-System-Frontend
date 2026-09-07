@@ -30,6 +30,7 @@ const CASHIER_RECONCILIATION_ROLES = [
 
 export const ROUTE_PERMISSIONS = {
   '/dashboard': ALL_ROLES,
+  '/attendance': ALL_ROLES,
   '/notifications': ALL_ROLES,
   '/admin/users': ADMIN_ROLES,
   '/admin/roles': ADMIN_ROLES,

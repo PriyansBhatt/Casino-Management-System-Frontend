@@ -14,6 +14,7 @@ import Dashboard from '../pages/Dashboard'
 import ComingSoon from '../pages/ComingSoon'
 import NotFound from '../pages/NotFound'
 import Unauthorized from '../pages/Unauthorized'
+import StaffAttendance from '../pages/attendance/StaffAttendance'
 
 // ============================================================
 // ROUTE GUARDS
@@ -178,6 +179,11 @@ const AppRoutes = () => {
       <Route
         path="/dashboard"
         element={protectedPage(<Dashboard />)}
+      />
+
+      <Route
+        path="/attendance"
+        element={protectedPage(<StaffAttendance />)}
       />
 
       {/* =====================================================

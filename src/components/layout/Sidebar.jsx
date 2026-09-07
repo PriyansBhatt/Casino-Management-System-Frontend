@@ -10,7 +10,13 @@ const sidebarSections = [
     { label: 'Reception / Gate', path: '/reception', icon: '🚪' },
     { label: 'Customers & KYC', path: '/customers', icon: '👥' },
   ],
-},
+  },
+  {
+    title: 'STAFF',
+    items: [
+      { label: 'My Attendance', path: '/attendance', icon: '⏱' },
+    ],
+  },
   {
     title: 'CASH & CHIPS',
     items: [
