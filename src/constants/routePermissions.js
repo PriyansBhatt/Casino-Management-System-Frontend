@@ -35,7 +35,7 @@ export const ROUTE_PERMISSIONS = {
   '/admin/users': ADMIN_ROLES,
   '/admin/roles': ADMIN_ROLES,
   '/admin/departments': ADMIN_ROLES,
-  '/admin/business-date': ADMIN_ROLES,
+  '/admin/business-date': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/admin/system-lock': ADMIN_ROLES,
   '/admin/settings': ADMIN_ROLES,
   '/admin/permissions': ADMIN_ROLES,

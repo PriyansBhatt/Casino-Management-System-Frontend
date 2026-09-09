@@ -2,14 +2,26 @@ import axiosInstance from './axiosInstance'
 
 const getMockBusinessStatus = () => ({
   businessDate: '2083-03-04',
+  expectedBusinessDate: '2083-03-04',
+  businessDateOpen: true,
+  businessDateHealth: 'HEALTHY',
+  businessDateStale: false,
+  staleByDays: 0,
+  lifecycleWarning: null,
   calendarDate: new Date().toISOString().split('T')[0],
   systemStatus: 'OPEN',
   isLocked: false,
+  systemLocked: false,
   lockReason: null,
+  continuationOverrideActive: false,
+  continuationOverrideExpiresAt: null,
+  continuationOverrideReason: null,
+  continuationOverrideAuthorizedBy: null,
   operationWindow: '12:30 PM - 6:00 AM',
   settlementGraceUntil: '6:30 AM',
   lockWindow: '6:30 AM - 12:30 PM',
   lastUpdatedAt: new Date().toISOString(),
+  serverTimestamp: new Date().toISOString(),
 })
 
 export const businessStatusApi = {

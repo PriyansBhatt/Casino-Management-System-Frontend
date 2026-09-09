@@ -46,6 +46,7 @@ const sidebarSections = [
       { label: 'Store / Purchase', path: '/store/purchase', icon: '📦' },
       { label: 'Accounts', path: '/accounts', icon: '💰' },
       { label: 'Reports', path: '/reports', icon: '📊' },
+      { label: 'Business Date', path: '/admin/business-date', icon: '📅' },
       { label: 'Settings', path: '/settings', icon: '⚙' },
     ],
   },
