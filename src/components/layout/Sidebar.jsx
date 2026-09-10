@@ -15,6 +15,7 @@ const sidebarSections = [
     title: 'STAFF',
     items: [
       { label: 'My Attendance', path: '/attendance', icon: '⏱' },
+      { label: 'Staff Management', path: '/hr/staff', icon: '🪪' },
     ],
   },
   {

@@ -15,6 +15,7 @@ import ComingSoon from '../pages/ComingSoon'
 import NotFound from '../pages/NotFound'
 import Unauthorized from '../pages/Unauthorized'
 import StaffAttendance from '../pages/attendance/StaffAttendance'
+import StaffManagement from '../pages/hr/StaffManagement'
 
 // ============================================================
 // ROUTE GUARDS
@@ -184,6 +185,11 @@ const AppRoutes = () => {
       <Route
         path="/attendance"
         element={protectedPage(<StaffAttendance />)}
+      />
+
+      <Route
+        path="/hr/staff"
+        element={protectedPage(<StaffManagement />)}
       />
 
       {/* =====================================================
