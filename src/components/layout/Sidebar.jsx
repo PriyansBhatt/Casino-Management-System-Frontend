@@ -15,9 +15,11 @@ const sidebarSections = [
     title: 'STAFF',
     items: [
       { label: 'My Attendance', path: '/attendance', icon: '⏱' },
+      { label: 'My Leave', path: '/hr/leave/me', icon: '🌴' },
       { label: 'Staff Management', path: '/hr/staff', icon: '🪪' },
       { label: 'Shift & Roster', path: '/hr/roster', icon: '📆' },
       { label: 'Attendance Management', path: '/hr/attendance', icon: '🕘' },
+      { label: 'Leave Management', path: '/hr/leave', icon: '🗓' },
     ],
   },
   {

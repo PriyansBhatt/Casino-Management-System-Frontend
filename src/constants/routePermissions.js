@@ -34,6 +34,8 @@ export const ROUTE_PERMISSIONS = {
   '/hr/staff': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/hr/roster': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/hr/attendance': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
+  '/hr/leave/me': ALL_ROLES,
+  '/hr/leave': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/notifications': ALL_ROLES,
   '/admin/users': ADMIN_ROLES,
   '/admin/roles': ADMIN_ROLES,

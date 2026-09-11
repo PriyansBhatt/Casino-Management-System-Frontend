@@ -32,6 +32,26 @@ export const hrApi = {
   createRosterAssignment: async (payload) => unwrap(await axiosInstance.post('/hr/roster', payload, options)),
   updateRosterAssignment: async (id, payload) => unwrap(await axiosInstance.patch(`/hr/roster/${id}`, payload, options)),
   cancelRosterAssignment: async (id, payload) => unwrap(await axiosInstance.post(`/hr/roster/${id}/cancel`, payload, options)),
+
+  getAvailableLeaveTypes: async () => unwrap(await axiosInstance.get('/hr/leave-types/available', options)) || [],
+  getLeaveTypes: async () => unwrap(await axiosInstance.get('/hr/leave-types', options)) || [],
+  createLeaveType: async (payload) => unwrap(await axiosInstance.post('/hr/leave-types', payload, options)),
+  updateLeaveType: async (id, payload) => unwrap(await axiosInstance.patch(`/hr/leave-types/${id}`, payload, options)),
+
+  createLeaveRequest: async (payload) => unwrap(await axiosInstance.post('/hr/leave', payload, options)),
+  getMyLeaveRequests: async (filters = {}) => unwrap(await axiosInstance.get('/hr/leave/me', {
+    ...options,
+    params: Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== '' && value != null)),
+  })) || [],
+  getLeaveRequests: async (filters = {}) => unwrap(await axiosInstance.get('/hr/leave', {
+    ...options,
+    params: Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== '' && value != null)),
+  })) || [],
+  getLeaveRequest: async (id) => unwrap(await axiosInstance.get(`/hr/leave/${id}`, options)),
+  approveLeaveRequest: async (id, payload) => unwrap(await axiosInstance.post(`/hr/leave/${id}/approve`, payload, options)),
+  rejectLeaveRequest: async (id, payload) => unwrap(await axiosInstance.post(`/hr/leave/${id}/reject`, payload, options)),
+  cancelLeaveRequest: async (id, payload) => unwrap(await axiosInstance.post(`/hr/leave/${id}/cancel`, payload, options)),
+  cancelMyLeaveRequest: async (id, payload) => unwrap(await axiosInstance.post(`/hr/leave/me/${id}/cancel`, payload, options)),
 }
 
 export default hrApi

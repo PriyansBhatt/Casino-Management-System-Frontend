@@ -18,6 +18,8 @@ import StaffAttendance from '../pages/attendance/StaffAttendance'
 import StaffManagement from '../pages/hr/StaffManagement'
 import ShiftRosterManagement from '../pages/hr/ShiftRosterManagement'
 import AttendanceManagement from '../pages/hr/AttendanceManagement'
+import MyLeave from '../pages/hr/MyLeave'
+import LeaveManagement from '../pages/hr/LeaveManagement'
 
 // ============================================================
 // ROUTE GUARDS
@@ -202,6 +204,16 @@ const AppRoutes = () => {
       <Route
         path="/hr/attendance"
         element={protectedPage(<AttendanceManagement />)}
+      />
+
+      <Route
+        path="/hr/leave/me"
+        element={protectedPage(<MyLeave />)}
+      />
+
+      <Route
+        path="/hr/leave"
+        element={protectedPage(<LeaveManagement />)}
       />
 
       {/* =====================================================
