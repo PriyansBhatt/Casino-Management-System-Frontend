@@ -52,3 +52,25 @@ export const getCasinoDateSuggestion = () => {
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
   return `${values.year}-${values.month}-${values.day}`
 }
+
+const localInputFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: CASINO_TIME_ZONE,
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+})
+
+export const formatInstantForKathmanduInput = (value) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = Object.fromEntries(localInputFormatter.formatToParts(date).map(({ type, value: partValue }) => [type, partValue]))
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+}
+
+export const kathmanduLocalToInstant = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value || '')) return null
+  const localWithSeconds = value.length === 16 ? `${value}:00` : value
+  const date = new Date(`${localWithSeconds}+05:45`)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}

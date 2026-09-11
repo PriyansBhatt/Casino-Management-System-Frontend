@@ -19,6 +19,14 @@ export const attendanceApi = {
     ...options,
     params: { businessDate },
   })) || [],
+
+  createAttendanceCorrection: async (attendanceId, payload) => unwrap(
+    await axiosInstance.post(`/attendance/${attendanceId}/corrections`, payload, options)
+  ),
+
+  getAttendanceCorrections: async (attendanceId) => unwrap(
+    await axiosInstance.get(`/attendance/${attendanceId}/corrections`, options)
+  ) || [],
 }
 
 export default attendanceApi

@@ -17,6 +17,7 @@ const sidebarSections = [
       { label: 'My Attendance', path: '/attendance', icon: '⏱' },
       { label: 'Staff Management', path: '/hr/staff', icon: '🪪' },
       { label: 'Shift & Roster', path: '/hr/roster', icon: '📆' },
+      { label: 'Attendance Management', path: '/hr/attendance', icon: '🕘' },
     ],
   },
   {

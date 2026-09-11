@@ -33,6 +33,7 @@ export const ROUTE_PERMISSIONS = {
   '/attendance': ALL_ROLES,
   '/hr/staff': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/hr/roster': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
+  '/hr/attendance': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/notifications': ALL_ROLES,
   '/admin/users': ADMIN_ROLES,
   '/admin/roles': ADMIN_ROLES,

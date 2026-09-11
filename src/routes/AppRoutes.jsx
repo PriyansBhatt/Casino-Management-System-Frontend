@@ -17,6 +17,7 @@ import Unauthorized from '../pages/Unauthorized'
 import StaffAttendance from '../pages/attendance/StaffAttendance'
 import StaffManagement from '../pages/hr/StaffManagement'
 import ShiftRosterManagement from '../pages/hr/ShiftRosterManagement'
+import AttendanceManagement from '../pages/hr/AttendanceManagement'
 
 // ============================================================
 // ROUTE GUARDS
@@ -196,6 +197,11 @@ const AppRoutes = () => {
       <Route
         path="/hr/roster"
         element={protectedPage(<ShiftRosterManagement />)}
+      />
+
+      <Route
+        path="/hr/attendance"
+        element={protectedPage(<AttendanceManagement />)}
       />
 
       {/* =====================================================
