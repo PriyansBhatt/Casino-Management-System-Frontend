@@ -1,16 +1,24 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import businessStatusApi from '../api/businessStatusApi'
+import useAuth from '../hooks/useAuth'
 import { useLocation } from 'react-router-dom'
 
 export const BusinessStatusContext = createContext(null)
 
 export const BusinessStatusProvider = ({ children }) => {
   const location = useLocation()
+  const { isAuthenticated } = useAuth()
   const [businessStatus, setBusinessStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const refreshBusinessStatus = useCallback(async () => {
+    if (!isAuthenticated) {
+      setBusinessStatus(null)
+      setError(null)
+      setIsLoading(false)
+      return null
+    }
     setIsLoading(true)
     setError(null)
 
@@ -25,7 +33,7 @@ export const BusinessStatusProvider = ({ children }) => {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [isAuthenticated])
 
   useEffect(() => {
     if (/^\/pit\/tables\/[^/]+\/mode$/.test(location.pathname)) {

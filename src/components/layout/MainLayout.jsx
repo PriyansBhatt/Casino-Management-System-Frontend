@@ -1,9 +1,10 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
 import Sidebar from './Sidebar'
 
 const MainLayout = ({ children }) => {
   const navigate = useNavigate()
+  const isManagementDashboard = useLocation().pathname === '/dashboard'
   const { user, logout } = useAuth()
 
   const displayName = user?.fullName || user?.name || user?.username || 'Authenticated User'
@@ -26,6 +27,9 @@ const MainLayout = ({ children }) => {
 
       <div className="min-h-screen pl-[280px]">
         <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 border-b border-slate-200 bg-white px-6">
+          {isManagementDashboard ? (
+            <p className="text-sm font-bold text-slate-600">Management overview</p>
+          ) : <>
           <button
             type="button"
             className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500"
@@ -45,8 +49,10 @@ const MainLayout = ({ children }) => {
             SHIFT · Day 13:00–23:00
           </div>
 
+          </>}
+
           <div className="ml-auto flex items-center gap-3">
-            <button
+            {!isManagementDashboard && <button
               type="button"
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
             >
@@ -54,7 +60,7 @@ const MainLayout = ({ children }) => {
               <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
                 2
               </span>
-            </button>
+            </button>}
 
             <div className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-300 bg-yellow-50 text-sm font-extrabold text-yellow-700">
               {initials || 'AU'}
