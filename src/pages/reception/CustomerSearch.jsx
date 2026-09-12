@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import useAuth from '../../hooks/useAuth'
+import { canMutateReception, createRequestGuard, loadReceptionScope, sessionStatusLabel } from '../../utils/receptionScope'
 import receptionApi from '../../api/receptionApi'
 import { getErrorMessage } from '../../utils/errorUtils'
 
 const ReceptionDashboard = () => {
+  const { user } = useAuth()
+  const canMutate = canMutateReception(user?.role)
+  const pageRequests = useRef(createRequestGuard())
+  const searchRequests = useRef(createRequestGuard())
+  const selectionRequests = useRef(createRequestGuard())
+  const mutationPending = useRef(false)
+  const [sessionChecked, setSessionChecked] = useState(false)
   const [customers, setCustomers] = useState([])
   const [sessions, setSessions] = useState([])
   const [businessDate, setBusinessDate] = useState(null)
@@ -30,26 +39,44 @@ const ReceptionDashboard = () => {
   )
 
   const loadPageData = useCallback(async () => {
+    if (mutationPending.current) return
+    const isCurrent = pageRequests.current.next()
+    searchRequests.current.invalidate()
+    selectionRequests.current.invalidate()
     setIsPageLoading(true)
     setPageError('')
+    setBusinessDate(null)
+    setSessions([])
+    setCustomers([])
+    setSelectedSession(null)
+    setSessionToClose(null)
+    setShowCustomerModal(false)
+    setCustomerResults([])
+    setSelectedCustomer(null)
+    setActiveSession(null)
+    setSessionChecked(false)
+    setSearchTerm('')
+    setStatusFilter('ALL')
     try {
-      const [customerData, sessionData, openBusinessDate] = await Promise.all([
-        receptionApi.getCustomers(),
-        receptionApi.getSessions(),
-        receptionApi.getCurrentOpenBusinessDate(),
-      ])
-      setCustomers(Array.isArray(customerData) ? customerData : [])
-      setSessions(Array.isArray(sessionData) ? sessionData : [])
-      setBusinessDate(openBusinessDate)
+      const scope = await loadReceptionScope(receptionApi)
+      if (!isCurrent()) return
+      setCustomers(scope.customers)
+      setSessions(scope.sessions)
+      setBusinessDate(scope.businessDate)
     } catch (error) {
-      setPageError(getErrorMessage(error))
+      if (isCurrent()) setPageError(getErrorMessage(error))
     } finally {
-      setIsPageLoading(false)
+      if (isCurrent()) setIsPageLoading(false)
     }
   }, [])
 
   useEffect(() => {
     loadPageData()
+    return () => {
+      pageRequests.current.invalidate()
+      searchRequests.current.invalidate()
+      selectionRequests.current.invalidate()
+    }
   }, [loadPageData])
 
   const showToast = (message, type = 'success') => {
@@ -58,16 +85,13 @@ const ReceptionDashboard = () => {
   }
 
   const summary = useMemo(() => {
-    const sessionsForBusinessDate = businessDate
-      ? sessions.filter((session) => session.businessDate === businessDate.businessDate)
-      : sessions
-
+    if (!businessDate || isPageLoading || pageError) return { total: 'Unavailable', open: 'Unavailable', closed: 'Unavailable' }
     return {
-      total: sessionsForBusinessDate.length,
-      open: sessionsForBusinessDate.filter((session) => session.status === 'OPEN').length,
-      closed: sessionsForBusinessDate.filter((session) => session.status === 'CLOSED').length,
+      total: sessions.length,
+      open: sessions.filter((session) => session.status === 'OPEN').length,
+      closed: sessions.filter((session) => session.status === 'CLOSED').length,
     }
-  }, [businessDate, sessions])
+  }, [businessDate, sessions, isPageLoading, pageError])
 
   const displaySessions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()
@@ -85,17 +109,40 @@ const ReceptionDashboard = () => {
     })
   }, [customerById, searchTerm, sessions, statusFilter])
 
-  const openCustomerModal = () => {
-    setCustomerQuery('')
+  const closeCustomerModal = () => {
+    if (mutationPending.current) return
+    searchRequests.current.invalidate()
+    selectionRequests.current.invalidate()
+    setShowCustomerModal(false)
+  }
+
+  const changeCustomerQuery = (value) => {
+    searchRequests.current.invalidate()
+    selectionRequests.current.invalidate()
+    setCustomerQuery(value)
     setCustomerResults([])
     setSelectedCustomer(null)
     setActiveSession(null)
+    setSessionChecked(false)
+    setIsSearching(false)
+    setIsCheckingSession(false)
     setModalError('')
+  }
+
+  const openCustomerModal = () => {
+    if (!canMutate || !businessDate || isPageLoading) return
+    changeCustomerQuery('')
     setShowCustomerModal(true)
   }
 
   const searchCustomers = async () => {
+    if (mutationPending.current) return
+    const isCurrent = searchRequests.current.next()
+    selectionRequests.current.invalidate()
     const query = customerQuery.trim()
+    setCustomerResults([])
+    setSessionChecked(false)
+    setIsCheckingSession(false)
     setIsSearching(true)
     setModalError('')
     setSelectedCustomer(null)
@@ -104,62 +151,77 @@ const ReceptionDashboard = () => {
       const results = query
         ? await receptionApi.searchCustomers(query)
         : await receptionApi.getCustomers()
+      if (!isCurrent()) return
       setCustomerResults(Array.isArray(results) ? results : [])
       if (!results?.length) {
         setModalError('No matching customer was found.')
       }
     } catch (error) {
+      if (!isCurrent()) return
       setCustomerResults([])
       setModalError(getErrorMessage(error))
     } finally {
-      setIsSearching(false)
+      if (isCurrent()) setIsSearching(false)
     }
   }
 
   const selectCustomer = async (customer) => {
+    if (mutationPending.current) return
+    const isCurrent = selectionRequests.current.next()
+    setSessionChecked(false)
     setSelectedCustomer(customer)
     setActiveSession(null)
     setModalError('')
     setIsCheckingSession(true)
     try {
-      setActiveSession(await receptionApi.getActiveSession(customer.id))
+      const session = await receptionApi.getActiveSession(customer.id)
+      if (!isCurrent()) return
+      setActiveSession(session)
+      setSessionChecked(true)
     } catch (error) {
-      setModalError(getErrorMessage(error))
+      if (isCurrent()) setModalError(getErrorMessage(error))
     } finally {
-      setIsCheckingSession(false)
+      if (isCurrent()) setIsCheckingSession(false)
     }
   }
 
   const openSession = async () => {
-    if (!selectedCustomer || isMutating || !businessDate) return
+    if (!canMutate || !selectedCustomer || !sessionChecked || activeSession || mutationPending.current || !businessDate || isPageLoading) return
+    mutationPending.current = true
 
     setIsMutating(true)
     setModalError('')
+    let scopeChanged = false
     try {
       const session = await receptionApi.openSession(selectedCustomer.id)
-      const refreshedActiveSession = await receptionApi.getActiveSession(selectedCustomer.id)
-      setActiveSession(refreshedActiveSession || session)
-      setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)])
+      setActiveSession(session)
+      scopeChanged = session.businessDate !== businessDate.businessDate
+      setSessions((current) => session.businessDate === businessDate.businessDate
+        ? [session, ...current.filter((item) => item.id !== session.id)] : current)
       showToast(`Session ${session.sessionCode} opened for ${selectedCustomer.fullName}.`)
     } catch (error) {
       const message = getErrorMessage(error)
       setModalError(message)
       showToast(message, 'error')
-
       if (message.includes('already has an active session')) {
+        const isCurrent = selectionRequests.current.next()
         try {
-          setActiveSession(await receptionApi.getActiveSession(selectedCustomer.id))
+          const existing = await receptionApi.getActiveSession(selectedCustomer.id)
+          if (isCurrent()) setActiveSession(existing)
         } catch {
-          // Keep the backend error visible if the follow-up lookup also fails.
+          // Preserve the original mutation error if this best-effort lookup fails.
         }
       }
     } finally {
+      mutationPending.current = false
       setIsMutating(false)
+      if (scopeChanged) loadPageData()
     }
   }
 
   const closeSession = async () => {
-    if (!sessionToClose || isMutating || !businessDate) return
+    if (!canMutate || !sessionToClose || sessionToClose.status !== 'OPEN' || mutationPending.current || !businessDate || isPageLoading) return
+    mutationPending.current = true
 
     setIsMutating(true)
     setModalError('')
@@ -171,9 +233,8 @@ const ReceptionDashboard = () => {
       setSelectedSession((current) =>
         current?.id === closedSession.id ? closedSession : current,
       )
-      const refreshedActiveSession = await receptionApi.getActiveSession(closedSession.customerId)
       if (selectedCustomer?.id === closedSession.customerId) {
-        setActiveSession(refreshedActiveSession)
+        setActiveSession(null)
       }
       setSessionToClose(null)
       showToast(`Session ${closedSession.sessionCode} closed successfully.`)
@@ -182,11 +243,13 @@ const ReceptionDashboard = () => {
       setModalError(message)
       showToast(message, 'error')
     } finally {
+      mutationPending.current = false
       setIsMutating(false)
     }
   }
 
   const exportSessions = () => {
+    if (!businessDate || isPageLoading || pageError) return
     const rows = displaySessions.map((session) => {
       const customer = customerById.get(session.customerId)
       return [
@@ -215,7 +278,7 @@ const ReceptionDashboard = () => {
     URL.revokeObjectURL(url)
   }
 
-  const noOpenBusinessDate = !isPageLoading && !businessDate
+  const noOpenBusinessDate = !isPageLoading && !pageError && !businessDate
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -237,7 +300,7 @@ const ReceptionDashboard = () => {
             <button type="button" disabled title="Customer registration will be integrated in a later phase" className="h-11 cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-5 text-sm font-black text-slate-400">
               ＋ New Customer
             </button>
-            <button type="button" onClick={openCustomerModal} className="h-11 rounded-xl bg-amber-400 px-5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-amber-300">
+            <button type="button" disabled={!canMutate || !businessDate || isPageLoading} onClick={openCustomerModal} className="h-11 rounded-xl bg-amber-400 px-5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
               ↪ Existing Customer Entry
             </button>
           </div>
@@ -256,8 +319,8 @@ const ReceptionDashboard = () => {
         )}
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard label="Business Date" value={businessDate?.businessDate || 'Not open'} description="Backend current-open date" icon="BD" tone="blue" />
-          <SummaryCard label="Sessions" value={summary.total} description="Sessions for displayed business date" icon="↪" tone="blue" />
+          <SummaryCard label="Business Date" value={isPageLoading ? 'Loading…' : pageError ? 'Unavailable' : businessDate?.businessDate || 'Not open'} description="Backend current-open date" icon="BD" tone="blue" />
+          <SummaryCard label="Business Date Sessions" value={summary.total} description="Sessions for displayed business date" icon="↪" tone="blue" />
           <SummaryCard label="Currently Inside" value={summary.open} description="OPEN customer sessions" icon="👥" tone="green" />
           <SummaryCard label="Completed Visits" value={summary.closed} description="CLOSED customer sessions" icon="✓" tone="amber" />
         </section>
@@ -276,7 +339,8 @@ const ReceptionDashboard = () => {
                   <option value="OPEN">Currently Inside</option>
                   <option value="CLOSED">Completed</option>
                 </select>
-                <button type="button" onClick={exportSessions} className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:border-emerald-300 hover:bg-emerald-50">Excel / CSV</button>
+                <button type="button" disabled={!businessDate || isPageLoading || Boolean(pageError)} onClick={exportSessions} className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:border-emerald-300 hover:bg-emerald-50">Excel / CSV</button>
+                <button type="button" disabled={isMutating} onClick={loadPageData} className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700">Refresh</button>
                 <button type="button" onClick={() => window.print()} className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:border-amber-300 hover:bg-amber-50">Print</button>
               </div>
             </div>
@@ -305,11 +369,11 @@ const ReceptionDashboard = () => {
                       <td className="px-4 py-4 text-sm font-semibold text-slate-700">{formatDateTime(session.entryTime)}</td>
                       <td className="px-4 py-4 text-sm font-semibold text-slate-700">{formatDateTime(session.exitTime)}</td>
                       <td className="px-4 py-4"><SessionStatusBadge status={session.status} /></td>
-                      <td className="px-4 py-4"><div className="flex gap-2"><button type="button" onClick={() => setSelectedSession(session)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">View</button>{session.status === 'OPEN' && <button type="button" disabled={!businessDate || isMutating} onClick={() => { setModalError(''); setSessionToClose(session) }} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300">Close Session</button>}</div></td>
+                      <td className="px-4 py-4"><div className="flex gap-2"><button type="button" onClick={() => setSelectedSession(session)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">View</button>{canMutate && session.status === 'OPEN' && <button type="button" disabled={!businessDate || isMutating} onClick={() => { setModalError(''); setSessionToClose(session) }} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300">Close Session</button>}</div></td>
                     </tr>
                   )
                 })}
-                {!isPageLoading && displaySessions.length === 0 && <tr><td colSpan={10} className="px-5 py-16 text-center text-sm text-slate-500">No customer sessions match the current search or filter.</td></tr>}
+                {!isPageLoading && displaySessions.length === 0 && <tr><td colSpan={10} className="px-5 py-16 text-center text-sm text-slate-500">{pageError ? 'Reception data unavailable.' : !businessDate ? 'No OPEN Business Date. Sessions are unavailable.' : 'No customer sessions match the current search or filter.'}</td></tr>}
                 {isPageLoading && <tr><td colSpan={10} className="px-5 py-16 text-center text-sm text-slate-500">Loading Reception data...</td></tr>}
               </tbody>
             </table>
@@ -322,13 +386,13 @@ const ReceptionDashboard = () => {
       </main>
 
       {showCustomerModal && (
-        <ModalOverlay onClose={() => !isMutating && setShowCustomerModal(false)}>
+        <ModalOverlay onClose={() => closeCustomerModal()}>
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <ModalHeader title="Existing Customer Entry" description="Search by customer code, name or phone, then check the current session state." onClose={() => !isMutating && setShowCustomerModal(false)} />
+            <ModalHeader title="Existing Customer Entry" description="Search by customer code, name or phone, then check the current session state." onClose={() => closeCustomerModal()} />
             <div className="max-h-[72vh] space-y-4 overflow-y-auto p-5">
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input type="search" value={customerQuery} onChange={(event) => setCustomerQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && !isSearching && searchCustomers()} placeholder="Enter customer code, name or phone" className="h-11 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-amber-400" />
-                <button type="button" disabled={isSearching} onClick={searchCustomers} className="h-11 rounded-lg border border-amber-300 bg-amber-50 px-5 text-sm font-black text-amber-700 disabled:opacity-60">{isSearching ? 'Searching...' : 'Search Customer'}</button>
+                <input type="search" value={customerQuery} disabled={isMutating} onChange={(event) => changeCustomerQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && !isSearching && searchCustomers()} placeholder="Enter customer code, name or phone" className="h-11 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-amber-400" />
+                <button type="button" disabled={isSearching || isMutating} onClick={searchCustomers} className="h-11 rounded-lg border border-amber-300 bg-amber-50 px-5 text-sm font-black text-amber-700 disabled:opacity-60">{isSearching ? 'Searching...' : 'Search Customer'}</button>
               </div>
               {modalError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{modalError}</div>}
               {customerResults.length > 0 && !selectedCustomer && (
@@ -337,7 +401,7 @@ const ReceptionDashboard = () => {
                     <button key={customer.id} type="button" onClick={() => selectCustomer(customer)} className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left hover:border-amber-300 hover:bg-amber-50">
                       <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-sm font-black text-amber-700">{getInitials(customer.fullName)}</span>
                       <span className="min-w-0 flex-1"><span className="block text-sm font-black text-slate-950">{customer.fullName}</span><span className="mt-1 block text-xs text-slate-500">{customer.customerCode} · {customer.phone}</span></span>
-                      <SessionStatusBadge status={customer.status} />
+                      <SessionStatusBadge customer status={customer.status} />
                     </button>
                   ))}
                 </div>
@@ -345,18 +409,18 @@ const ReceptionDashboard = () => {
               {selectedCustomer && (
                 <div className="space-y-4">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start gap-4"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-amber-100 text-lg font-black text-amber-700">{getInitials(selectedCustomer.fullName)}</span><div className="min-w-0 flex-1"><h3 className="text-xl font-black text-slate-950">{selectedCustomer.fullName}</h3><p className="mt-1 text-sm text-slate-500">{selectedCustomer.customerCode} · {selectedCustomer.nationality}</p></div><SessionStatusBadge status={selectedCustomer.status} /></div>
+                    <div className="flex items-start gap-4"><span className="flex h-14 w-14 items-center justify-center rounded-xl bg-amber-100 text-lg font-black text-amber-700">{getInitials(selectedCustomer.fullName)}</span><div className="min-w-0 flex-1"><h3 className="text-xl font-black text-slate-950">{selectedCustomer.fullName}</h3><p className="mt-1 text-sm text-slate-500">{selectedCustomer.customerCode} · {selectedCustomer.nationality}</p></div><SessionStatusBadge customer status={selectedCustomer.status} /></div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2"><DetailCard label="Phone" value={selectedCustomer.phone || 'Not available'} /><DetailCard label="Customer UUID" value={selectedCustomer.id} /></div>
                   {isCheckingSession && <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">Checking active session...</div>}
-                  {!isCheckingSession && activeSession && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"><p className="text-sm font-black text-amber-800">Customer is currently checked in.</p><p className="mt-1 text-xs text-amber-700">{activeSession.sessionCode} · Business Date {activeSession.businessDate} · Entry {formatDateTime(activeSession.entryTime)}</p></div>}
-                  {!isCheckingSession && !activeSession && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">Customer is not currently checked in.</div>}
+                  {!isCheckingSession && activeSession && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"><p className="text-sm font-black text-amber-800">{activeSession.status === 'OPEN' ? 'Customer is currently checked in.' : 'Unknown / legacy session state. Backend review required.'}</p><p className="mt-1 text-xs text-amber-700">{activeSession.sessionCode} · Business Date {activeSession.businessDate} · Entry {formatDateTime(activeSession.entryTime)}</p></div>}
+                  {sessionChecked && !isCheckingSession && !activeSession && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">Customer is not currently checked in.</div>}
                 </div>
               )}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4">
-              <button type="button" disabled={isMutating} onClick={() => setShowCustomerModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60">Cancel</button>
-              <button type="button" disabled={!selectedCustomer || Boolean(activeSession) || isCheckingSession || isMutating || !businessDate} onClick={openSession} className="rounded-lg bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isMutating ? 'Opening...' : 'Open Visit'}</button>
+              <button type="button" disabled={isMutating} onClick={closeCustomerModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60">Cancel</button>
+              <button type="button" disabled={!canMutate || !sessionChecked || !selectedCustomer || Boolean(activeSession) || isCheckingSession || isMutating || !businessDate} onClick={openSession} className="rounded-lg bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isMutating ? 'Opening...' : 'Open Visit'}</button>
             </div>
           </div>
         </ModalOverlay>
@@ -368,13 +432,13 @@ const ReceptionDashboard = () => {
             <ModalHeader title="Customer Session Details" description="Backend-authoritative Reception visit information." onClose={() => setSelectedSession(null)} />
             <div className="grid gap-3 p-5 sm:grid-cols-2">
               <DetailCard label="Session Code" value={selectedSession.sessionCode} />
-              <DetailCard label="Status" value={selectedSession.status} />
+              <DetailCard label="Status" value={sessionStatusLabel(selectedSession.status)} />
               <DetailCard label="Business Date" value={selectedSession.businessDate} />
               <DetailCard label="Customer" value={customerById.get(selectedSession.customerId)?.fullName || selectedSession.customerId} />
               <DetailCard label="Entry Time" value={formatDateTime(selectedSession.entryTime)} />
               <DetailCard label="Exit Time" value={formatDateTime(selectedSession.exitTime)} />
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4"><button type="button" onClick={() => setSelectedSession(null)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700">Close</button>{selectedSession.status === 'OPEN' && <button type="button" disabled={!businessDate || isMutating} onClick={() => { setSelectedSession(null); setModalError(''); setSessionToClose(selectedSession) }} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Complete Exit</button>}</div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4"><button type="button" onClick={() => setSelectedSession(null)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700">Close</button>{canMutate && selectedSession.status === 'OPEN' && <button type="button" disabled={!businessDate || isMutating} onClick={() => { setSelectedSession(null); setModalError(''); setSessionToClose(selectedSession) }} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">Complete Exit</button>}</div>
           </div>
         </ModalOverlay>
       )}
@@ -384,7 +448,7 @@ const ReceptionDashboard = () => {
           <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
             <ModalHeader title="Complete Customer Exit" description="The backend will record the exit timestamp and operator." onClose={() => !isMutating && setSessionToClose(null)} />
             <div className="space-y-4 p-5"><DetailCard label="Session" value={sessionToClose.sessionCode} /><DetailCard label="Customer" value={customerById.get(sessionToClose.customerId)?.fullName || sessionToClose.customerId} /><DetailCard label="Entered" value={formatDateTime(sessionToClose.entryTime)} />{modalError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{modalError}</div>}</div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4"><button type="button" disabled={isMutating} onClick={() => setSessionToClose(null)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60">Cancel</button><button type="button" disabled={isMutating || !businessDate} onClick={closeSession} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">{isMutating ? 'Closing...' : 'Confirm Exit'}</button></div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 p-4"><button type="button" disabled={isMutating} onClick={() => setSessionToClose(null)} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-60">Cancel</button><button type="button" disabled={!canMutate || isMutating || !businessDate} onClick={closeSession} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-black text-white disabled:bg-slate-300">{isMutating ? 'Closing...' : 'Confirm Exit'}</button></div>
           </div>
         </ModalOverlay>
       )}
@@ -399,11 +463,12 @@ const SummaryCard = ({ label, value, description, icon, tone }) => {
   return <div className={`min-h-[130px] rounded-2xl border bg-gradient-to-br p-4 shadow-sm ${tones[tone] || tones.blue}`}><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</p><p className="mt-4 font-serif text-3xl font-black text-slate-950">{value}</p></div><span className="flex h-10 min-w-10 items-center justify-center rounded-xl bg-white px-2 text-sm font-black shadow-sm">{icon}</span></div><p className="mt-3 text-xs text-slate-500">{description}</p></div>
 }
 
-const SessionStatusBadge = ({ status }) => {
-  const active = status === 'OPEN' || status === 'ACTIVE'
+const SessionStatusBadge = ({ status, customer = false }) => {
+  const active = customer ? status === 'ACTIVE' : status === 'OPEN'
   const blocked = status === 'BLOCKED' || status === 'INACTIVE'
-  const classes = active ? 'border-sky-200 bg-sky-50 text-sky-700' : blocked ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black ${classes}`}>{status || 'UNKNOWN'}</span>
+  const known = customer ? ['ACTIVE', 'BLOCKED', 'INACTIVE'].includes(status) : ['OPEN', 'CLOSED'].includes(status)
+  const classes = !known ? 'border-slate-200 bg-slate-50 text-slate-600' : active ? 'border-sky-200 bg-sky-50 text-sky-700' : blocked ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black ${classes}`}>{customer ? status || 'UNKNOWN' : sessionStatusLabel(status)}</span>
 }
 
 const ModalHeader = ({ title, description, onClose }) => <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4"><div><div className="flex items-center gap-3"><span className="h-2.5 w-2.5 rotate-45 bg-amber-400" /><h2 className="font-serif text-2xl font-black text-slate-950">{title}</h2></div><p className="mt-2 text-sm text-slate-500">{description}</p></div><button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-lg text-slate-500 hover:bg-slate-100">×</button></div>

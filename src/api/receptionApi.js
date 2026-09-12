@@ -13,8 +13,10 @@ export const receptionApi = {
     return response.data
   },
 
-  getSessions: async () => {
-    const response = await axiosInstance.get('/sessions')
+  getSessions: async (businessDate) => {
+    const response = await axiosInstance.get('/sessions', {
+      params: businessDate ? { businessDate } : {},
+    })
     return response.data
   },
 
@@ -42,7 +44,10 @@ export const receptionApi = {
 
   getCurrentOpenBusinessDate: async () => {
     const response = await axiosInstance.get('/business-date/current-open')
-    return response.data?.data ?? null
+    if (response.data?.success !== true || !Object.hasOwn(response.data, 'data')) {
+      throw new Error('Current OPEN Business Date is unavailable.')
+    }
+    return response.data.data
   },
 }
 
