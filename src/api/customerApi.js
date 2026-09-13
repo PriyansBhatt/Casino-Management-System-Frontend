@@ -192,6 +192,12 @@ export const customerApi = {
   },
 }
 
+// The authoritative Customers & KYC directory never switches to local mock data.
+export const getCustomerDirectory = async () => {
+  const response = await axiosInstance.get('/customers')
+  return response.data
+}
+
 export const getCustomers = customerApi.getCustomers
 export const getCustomerById = customerApi.getCustomerById
 export const createCustomer = customerApi.createCustomer

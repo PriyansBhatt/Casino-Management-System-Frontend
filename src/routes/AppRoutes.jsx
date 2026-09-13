@@ -40,7 +40,6 @@ import MainLayout from '../components/layout/MainLayout'
 
 import CustomerSearch from '../pages/reception/CustomerSearch'
 import CustomersKyc from '../pages/reception/CustomersKyc'
-import CustomerRegistration from '../pages/reception/CustomerRegistration'
 
 // ============================================================
 // CASHIER / CASH & CHIPS
@@ -232,7 +231,7 @@ const AppRoutes = () => {
 
       <Route
         path="/reception/register"
-        element={protectedPage(<CustomerRegistration />)}
+        element={<Navigate to="/customers" replace />}
       />
 
       <Route
@@ -261,7 +260,7 @@ const AppRoutes = () => {
 
 <Route
   path="/customers/register"
-  element={protectedPage(<CustomerRegistration />)}
+  element={<Navigate to="/customers" replace />}
 />
 
 <Route
@@ -274,31 +273,6 @@ const AppRoutes = () => {
   element={<Navigate to="/customers" replace />}
 />
 
-
-      <Route
-        path="/customers"
-        element={protectedPage(<CustomerSearch />)}
-      />
-
-      <Route
-        path="/customers/kyc"
-        element={<Navigate to="/customers" replace />}
-      />
-
-      <Route
-        path="/customers/register"
-        element={protectedPage(<CustomerRegistration />)}
-      />
-
-      <Route
-        path="/customers/:id"
-        element={<Navigate to="/customers" replace />}
-      />
-
-      <Route
-        path="/customers/:id/edit"
-        element={<Navigate to="/customers" replace />}
-      />
 
       {/* =====================================================
           DAILY BADGE & SESSIONS

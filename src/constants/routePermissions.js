@@ -50,6 +50,7 @@ export const ROUTE_PERMISSIONS = {
   '/director/suspicious-alerts': DIRECTOR_ROLES,
   '/director/approval-history': DIRECTOR_ROLES,
   '/director/system-unlock': DIRECTOR_ROLES,
+  '/customers': [ROLES.RECEPTIONIST, ROLES.DIRECTOR, ROLES.SUPER_ADMIN],
   '/reception': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR, ROLES.RECEPTIONIST],
   '/reception/gate': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR, ROLES.RECEPTIONIST],
   '/reception/customers/new': RECEPTION_ROLES,

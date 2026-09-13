@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createIdentityDocument,
-  getCustomerIdentityDocuments,
   getCustomerKyc,
-  getCustomers,
+  getCustomerDirectory,
   getPrivilegedCustomerKyc,
   registerCustomer,
   updateCustomerClassification,
@@ -11,7 +10,7 @@ import {
 } from '../../api/customerApi'
 import { getErrorMessage, isNetworkError } from '../../utils/errorUtils'
 import useAuth from '../../hooks/useAuth'
-import { ROLES } from '../../constants/roles'
+import { canManageCustomers, createCustomerRequestGuard, customerDirectoryCsv, directorySummary, fetchCustomerProfile, filterCustomerDirectory, lastVisitLabel, mapCustomerDirectory, UNAVAILABLE } from '../../utils/customersKyc'
 
 const emptyCustomerForm = {
   fullName: '',
@@ -48,47 +47,15 @@ const emptyClassificationForm = {
   internalNotes: '',
 }
 
-const mapBackendCustomer = (customer) => {
-  const backendVisitCount = Number(customer.totalVisits)
-  const visits = Number.isFinite(backendVisitCount) && backendVisitCount >= 0
-    ? Math.trunc(backendVisitCount)
-    : 0
-  const lastVisitBusinessDate =
-    typeof customer.lastVisitBusinessDate === 'string' &&
-    customer.lastVisitBusinessDate.trim()
-      ? customer.lastVisitBusinessDate
-      : null
-
-  return {
-    id: customer.id,
-    cid: customer.customerCode,
-    name: customer.fullName,
-    initials: getInitials(customer.fullName),
-    nationality: customer.nationality,
-    contact: customer.phone,
-    status: customer.status,
-    address: '—',
-    idType: '—',
-    idNumber: '—',
-    visits,
-    lifetimeBuyIn: null,
-    lifetimeCashOut: null,
-    category: '—',
-    lastVisit: visits > 0 && lastVisitBusinessDate
-      ? lastVisitBusinessDate
-      : 'No visits',
-    lastEntryTime:
-      typeof customer.lastEntryTime === 'string'
-        ? customer.lastEntryTime
-        : null,
-    hasActiveSession: customer.hasActiveSession === true,
-    activeSessionId: customer.activeSessionId || null,
-    remarks: '',
-  }
-}
+const mapBackendCustomer = (customer) => mapCustomerDirectory([customer])[0]
 
 const CustomersKyc = () => {
   const { user } = useAuth()
+  const directoryRequests = useRef(createCustomerRequestGuard())
+  const profileRequests = useRef(createCustomerRequestGuard())
+  const profileTarget = useRef(null)
+  const profileSaving = useRef(false)
+  const registrationPending = useRef(false)
   const [customers, setCustomers] = useState([])
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true)
   const [customersError, setCustomersError] = useState(null)
@@ -96,8 +63,6 @@ const CustomersKyc = () => {
   const [viewMode, setViewMode] = useState('RECEPTION')
   const [searchTerm, setSearchTerm] = useState('')
   const [nationalityFilter, setNationalityFilter] = useState('ALL')
-  const [idTypeFilter, setIdTypeFilter] = useState('ALL')
-  const [categoryFilter, setCategoryFilter] = useState('ALL')
 
   const [showCustomerModal, setShowCustomerModal] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -119,85 +84,57 @@ const CustomersKyc = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const canViewPrivileged = [ROLES.DIRECTOR, ROLES.SUPER_ADMIN].includes(user?.role)
+  const canViewPrivileged = canManageCustomers(user?.role)
   const isDirectorView = canViewPrivileged && viewMode === 'DIRECTOR'
+  const directoryAvailable = !isLoadingCustomers && !customersError
 
   useEffect(() => {
     setViewMode(canViewPrivileged ? 'DIRECTOR' : 'RECEPTION')
   }, [canViewPrivileged])
 
   const loadCustomers = useCallback(async () => {
+    if (registrationPending.current) return
+    const isCurrent = directoryRequests.current.next()
     setIsLoadingCustomers(true)
     setCustomersError(null)
-
+    setCustomers([])
     try {
-      const backendCustomers = await getCustomers()
-      setCustomers(
-        Array.isArray(backendCustomers)
-          ? backendCustomers.map(mapBackendCustomer)
-          : [],
-      )
+      const data = mapCustomerDirectory(await getCustomerDirectory())
+      if (isCurrent()) setCustomers(data)
     } catch (error) {
-      setCustomersError('Unable to load customer records.')
+      if (isCurrent()) setCustomersError('Unable to load customer records. Directory totals are unavailable.')
     } finally {
-      setIsLoadingCustomers(false)
+      if (isCurrent()) setIsLoadingCustomers(false)
     }
   }, [])
 
   useEffect(() => {
     loadCustomers()
+    return () => {
+      directoryRequests.current.invalidate()
+      profileRequests.current.invalidate()
+      profileTarget.current = null
+    }
   }, [loadCustomers])
 
-  const summary = useMemo(() => {
-    return {
-      totalCustomers: customers.length,
-      totalVisits: customers.reduce(
-        (total, customer) => total + customer.visits,
-        0,
-      ),
-      vipCustomers: '—',
-      totalBuyIn: '—',
-      totalCashOut: '—',
-    }
-  }, [customers])
+  // A mode change closes the profile and invalidates its forms and pending requests.
+  useEffect(() => {
+    profileRequests.current.invalidate()
+    profileTarget.current = null
+    setSelectedCustomer(null)
+    setCustomerProfile(null)
+    setPrivilegedProfile(null)
+    setIdentityDocuments([])
+    setProfileAction(null)
+    setKycForm(emptyKycForm)
+    setIdentityForm(emptyIdentityForm)
+    setClassificationForm(emptyClassificationForm)
+  }, [isDirectorView, user?.role])
 
-  const filteredCustomers = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase()
-
-    return customers.filter((customer) => {
-      const matchesSearch =
-        !query ||
-        customer.name?.toLowerCase().includes(query) ||
-        customer.cid?.toLowerCase().includes(query) ||
-        customer.contact?.toLowerCase().includes(query) ||
-        customer.nationality?.toLowerCase().includes(query) ||
-        customer.idNumber?.toLowerCase().includes(query)
-
-      const matchesNationality =
-        nationalityFilter === 'ALL' ||
-        customer.nationality === nationalityFilter
-
-      const matchesIdType =
-        idTypeFilter === 'ALL' || customer.idType === idTypeFilter
-
-      const matchesCategory =
-        categoryFilter === 'ALL' ||
-        customer.category === categoryFilter
-
-      return (
-        matchesSearch &&
-        matchesNationality &&
-        matchesIdType &&
-        matchesCategory
-      )
-    })
-  }, [
-    customers,
-    searchTerm,
-    nationalityFilter,
-    idTypeFilter,
-    categoryFilter,
-  ])
+  const summary = useMemo(() => directorySummary(customers, directoryAvailable), [customers, directoryAvailable])
+  const filteredCustomers = useMemo(() =>
+    filterCustomerDirectory(customers, searchTerm, nationalityFilter),
+  [customers, searchTerm, nationalityFilter])
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
@@ -238,60 +175,78 @@ const CustomersKyc = () => {
   }
 
   const loadCustomerProfile = async (customer, privileged = isDirectorView) => {
+    if (profileTarget.current !== customer.id) return
+    const isCurrent = profileRequests.current.next()
     setIsLoadingProfile(true)
+    setCustomerProfile(null)
+    setPrivilegedProfile(null)
+    setIdentityDocuments([])
+    setKycForm(emptyKycForm)
+    setIdentityForm(emptyIdentityForm)
+    setClassificationForm(emptyClassificationForm)
+    setProfileAction(null)
     setProfileError(null)
     setProfileActionError(null)
-
     try {
-      const basic = await getCustomerKyc(customer.id)
+      const { basic, management, documents } = await fetchCustomerProfile(
+        { getCustomerKyc, getPrivilegedCustomerKyc }, customer.id, privileged && canViewPrivileged)
+      if (!isCurrent() || profileTarget.current !== customer.id) return
       setCustomerProfile(basic)
       applyKycForm(basic)
-
-      if (privileged && canViewPrivileged) {
-        const [privilegedData, documents] = await Promise.all([
-          getPrivilegedCustomerKyc(customer.id),
-          getCustomerIdentityDocuments(customer.id),
-        ])
-        setPrivilegedProfile(privilegedData)
-        setIdentityDocuments(Array.isArray(documents) ? documents : [])
-        applyClassificationForm(privilegedData)
-      } else {
-        setPrivilegedProfile(null)
-        setIdentityDocuments([])
-      }
+      setPrivilegedProfile(management)
+      setIdentityDocuments(documents)
+      if (management) applyClassificationForm(management)
     } catch (error) {
-      setProfileError(profileRequestError(error, 'Unable to load the customer profile.'))
+      if (isCurrent()) setProfileError(profileRequestError(error, 'Unable to load the customer profile.'))
     } finally {
-      setIsLoadingProfile(false)
+      if (isCurrent()) setIsLoadingProfile(false)
     }
   }
 
   const openCustomerProfile = (customer) => {
+    if (profileSaving.current) return
+    profileTarget.current = customer.id
     setSelectedCustomer(customer)
-    setCustomerProfile(null)
-    setPrivilegedProfile(null)
-    setIdentityDocuments([])
-    setProfileAction(null)
-    setIdentityForm(emptyIdentityForm)
     loadCustomerProfile(customer)
   }
 
   const closeCustomerProfile = () => {
-    if (isSavingProfile) return
+    if (profileSaving.current) return
+    profileRequests.current.invalidate()
+    profileTarget.current = null
     setSelectedCustomer(null)
     setCustomerProfile(null)
     setPrivilegedProfile(null)
     setIdentityDocuments([])
+    setKycForm(emptyKycForm)
+    setIdentityForm(emptyIdentityForm)
+    setClassificationForm(emptyClassificationForm)
     setProfileAction(null)
     setProfileError(null)
     setProfileActionError(null)
   }
 
-  const saveBasicKyc = async () => {
+  const beginProfileSave = (privileged = false) => {
+    const id = profileTarget.current
+    if (profileSaving.current || isLoadingProfile || profileError || !id
+        || selectedCustomer?.id !== id || customerProfile?.id !== id
+        || (privileged && (!isDirectorView || privilegedProfile?.id !== id))) return null
+    profileSaving.current = true
     setIsSavingProfile(true)
     setProfileActionError(null)
+    return { id, isCurrent: profileRequests.current.next() }
+  }
+
+  const finishProfileSave = () => {
+    profileSaving.current = false
+    setIsSavingProfile(false)
+  }
+
+  const saveBasicKyc = async () => {
+    const operation = beginProfileSave()
+    if (!operation) return
     try {
-      const updated = await updateCustomerKyc(selectedCustomer.id, {
+      const updated = await updateCustomerKyc(operation.id, {
         dateOfBirth: kycForm.dateOfBirth || null,
         gender: kycForm.gender.trim() || null,
         permanentAddress: kycForm.permanentAddress.trim() || null,
@@ -299,14 +254,16 @@ const CustomersKyc = () => {
         email: kycForm.email.trim() || null,
         occupation: kycForm.occupation.trim() || null,
       })
+      if (!operation.isCurrent()) return
+      if (updated?.id !== operation.id) throw new Error('Customer response does not match the saved profile.')
       setCustomerProfile(updated)
       applyKycForm(updated)
       setProfileAction(null)
       showToast('Customer KYC updated successfully.')
     } catch (error) {
-      setProfileActionError(profileRequestError(error, 'Unable to update customer KYC.'))
+      if (operation.isCurrent()) setProfileActionError(profileRequestError(error, 'Unable to update customer KYC.'))
     } finally {
-      setIsSavingProfile(false)
+      finishProfileSave()
     }
   }
 
@@ -322,10 +279,10 @@ const CustomersKyc = () => {
       return
     }
 
-    setIsSavingProfile(true)
-    setProfileActionError(null)
+    const operation = beginProfileSave()
+    if (!operation) return
     try {
-      await createIdentityDocument(selectedCustomer.id, {
+      await createIdentityDocument(operation.id, {
         documentType: identityForm.documentType,
         documentNumber: identityForm.documentNumber.trim(),
         issuingCountry: identityForm.issuingCountry.trim() || null,
@@ -333,34 +290,37 @@ const CustomersKyc = () => {
         expiryDate: identityForm.expiryDate || null,
         primaryDocument: identityForm.primaryDocument,
       })
+      if (!operation.isCurrent()) return
       setIdentityForm(emptyIdentityForm)
       setProfileAction(null)
-      await loadCustomerProfile(selectedCustomer)
       showToast('Identity document added successfully.')
+      await loadCustomerProfile({ id: operation.id })
     } catch (error) {
-      setProfileActionError(profileRequestError(error, 'Unable to add the identity document.'))
+      if (operation.isCurrent()) setProfileActionError(profileRequestError(error, 'Unable to add the identity document.'))
     } finally {
-      setIsSavingProfile(false)
+      finishProfileSave()
     }
   }
 
   const saveClassification = async () => {
-    setIsSavingProfile(true)
-    setProfileActionError(null)
+    const operation = beginProfileSave(true)
+    if (!operation) return
     try {
-      const updated = await updateCustomerClassification(selectedCustomer.id, {
+      const updated = await updateCustomerClassification(operation.id, {
         category: classificationForm.category,
         riskLevel: classificationForm.riskLevel,
         internalNotes: classificationForm.internalNotes.trim() || null,
       })
+      if (!operation.isCurrent()) return
+      if (updated?.id !== operation.id) throw new Error('Customer response does not match the saved profile.')
       setPrivilegedProfile(updated)
       applyClassificationForm(updated)
       setProfileAction(null)
       showToast('Customer classification updated successfully.')
     } catch (error) {
-      setProfileActionError(profileRequestError(error, 'Unable to update customer classification.'))
+      if (operation.isCurrent()) setProfileActionError(profileRequestError(error, 'Unable to update customer classification.'))
     } finally {
-      setIsSavingProfile(false)
+      finishProfileSave()
     }
   }
 
@@ -447,7 +407,7 @@ const CustomersKyc = () => {
   }
 
   const saveCustomer = async () => {
-    if (isSubmitting) {
+    if (registrationPending.current || isSubmitting) {
       return
     }
 
@@ -477,6 +437,7 @@ const CustomersKyc = () => {
 
       showToast(`${customerForm.fullName.trim()} updated successfully.`)
     } else {
+      registrationPending.current = true
       setIsSubmitting(true)
       setFormErrors({})
 
@@ -488,6 +449,9 @@ const CustomersKyc = () => {
         })
 
         const newCustomer = mapBackendCustomer(registeredCustomer)
+        directoryRequests.current.invalidate()
+        setSearchTerm('')
+        setNationalityFilter('ALL')
 
         setCustomers((currentCustomers) => [
           newCustomer,
@@ -520,6 +484,7 @@ const CustomersKyc = () => {
         showToast(message, 'error')
         return
       } finally {
+        registrationPending.current = false
         setIsSubmitting(false)
       }
     }
@@ -531,64 +496,8 @@ const CustomersKyc = () => {
   }
 
   const exportCustomers = () => {
-    const baseHeaders = [
-      'CID',
-      'Customer',
-      'Nationality',
-      'Contact',
-      'Address',
-      'ID Type',
-      'ID Number',
-      'Visits',
-      'Category',
-      'Last Visit',
-      'Remarks',
-    ]
-
-    const directorHeaders = [
-      'Lifetime Buy-In',
-      'Lifetime Cash-Out',
-      'Net Win/Loss',
-    ]
-
-    const headers = isDirectorView
-      ? [...baseHeaders, ...directorHeaders]
-      : baseHeaders
-
-    const rows = filteredCustomers.map((customer) => {
-      const baseRow = [
-        customer.cid,
-        customer.name,
-        customer.nationality,
-        customer.contact,
-        customer.address,
-        customer.idType,
-        customer.idNumber,
-        customer.visits,
-        customer.category,
-        customer.lastVisit,
-        customer.remarks,
-      ]
-
-      if (!isDirectorView) {
-        return baseRow
-      }
-
-      return [
-        ...baseRow,
-        '—',
-        '—',
-        '—',
-      ]
-    })
-
-    const csv = [headers, ...rows]
-      .map((row) =>
-        row
-          .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-          .join(','),
-      )
-      .join('\n')
+    if (!directoryAvailable) return
+    const csv = customerDirectoryCsv(filteredCustomers)
 
     const blob = new Blob([csv], {
       type: 'text/csv;charset=utf-8;',
@@ -609,8 +518,6 @@ const CustomersKyc = () => {
   const resetFilters = () => {
     setSearchTerm('')
     setNationalityFilter('ALL')
-    setIdTypeFilter('ALL')
-    setCategoryFilter('ALL')
   }
 
   return (
@@ -636,7 +543,7 @@ const CustomersKyc = () => {
             <div className="flex rounded-xl bg-slate-100 p-1">
               <button
                 type="button"
-                onClick={() => setViewMode('RECEPTION')}
+                disabled={isSavingProfile} onClick={() => setViewMode('RECEPTION')}
                 className={`rounded-lg px-4 py-2 text-sm font-black transition ${
                   viewMode === 'RECEPTION'
                     ? 'bg-amber-400 text-slate-950 shadow-sm'
@@ -649,21 +556,21 @@ const CustomersKyc = () => {
               {canViewPrivileged && (
                 <button
                   type="button"
-                  onClick={() => setViewMode('DIRECTOR')}
+                  disabled={isSavingProfile} onClick={() => setViewMode('DIRECTOR')}
                   className={`rounded-lg px-4 py-2 text-sm font-black transition ${
                     viewMode === 'DIRECTOR'
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
                       : 'text-slate-600 hover:bg-white'
                   }`}
                 >
-                  Director / Admin
+                  Management View
                 </button>
               )}
             </div>
 
             <button
               type="button"
-              onClick={openNewCustomerModal}
+              disabled={!directoryAvailable || isSubmitting} onClick={openNewCustomerModal}
               className="h-11 rounded-xl bg-amber-400 px-5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-amber-300"
             >
               ＋ New Customer
@@ -671,7 +578,7 @@ const CustomersKyc = () => {
 
             <button
               type="button"
-              onClick={exportCustomers}
+              disabled={!directoryAvailable} onClick={exportCustomers}
               className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50"
             >
               Excel / CSV
@@ -679,7 +586,7 @@ const CustomersKyc = () => {
 
             <button
               type="button"
-              onClick={() => window.print()}
+              disabled title="Directory print is unavailable while scoped printing is not implemented"
               className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-amber-300 hover:bg-amber-50"
             >
               Print
@@ -697,18 +604,18 @@ const CustomersKyc = () => {
           <SummaryCard
             label="Total Visits"
             value={summary.totalVisits}
-            description="Recorded customer visits"
+            description="Lifetime session records, including open visits"
           />
 
           <SummaryCard
             label="VIP / VVIP"
             value={summary.vipCustomers}
-            description="Premium customer categories"
+            description="Not provided by the directory"
           />
 
           <SummaryCard
             label="Currently Displayed"
-            value={filteredCustomers.length}
+            value={directoryAvailable ? filteredCustomers.length : UNAVAILABLE}
             description="Records matching filters"
           />
 
@@ -717,25 +624,25 @@ const CustomersKyc = () => {
               <SummaryCard
                 label="Lifetime Buy-In"
                 value={summary.totalBuyIn}
-                description="Authorized management view"
+                description="Customer financial totals are unavailable"
               />
 
               <SummaryCard
                 label="Lifetime Cash-Out"
                 value={summary.totalCashOut}
-                description="Authorized management view"
+                description="Customer financial totals are unavailable"
               />
 
               <SummaryCard
-                label="Customer Net Position"
-                value="—"
-                description="Buy-in minus cash-out"
+                label="Customer Financial Summary"
+                value={UNAVAILABLE}
+                description="Customer financial totals are unavailable"
               />
 
               <SummaryCard
                 label="Average Visits"
-                value="—"
-                description="Average visits per customer"
+                value={UNAVAILABLE}
+                description="Not calculated in this phase"
               />
             </>
           )}
@@ -764,12 +671,12 @@ const CustomersKyc = () => {
                 </button>
               </div>
 
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(320px,1fr)_180px_180px_180px]">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(320px,1fr)_180px_1fr]">
                 <input
                   type="search"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search customer name, CID, phone or ID number..."
+                  placeholder="Search customer name, CID, phone or nationality..."
                   className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-amber-400 focus:bg-white"
                 />
 
@@ -790,36 +697,7 @@ const CustomersKyc = () => {
                   )}
                 </select>
 
-                <select
-                  value={idTypeFilter}
-                  onChange={(event) =>
-                    setIdTypeFilter(event.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-amber-400"
-                >
-                  <option value="ALL">All ID Types</option>
-                  {[...new Set(customers.map((item) => item.idType))].map(
-                    (idType) => (
-                      <option key={idType} value={idType}>
-                        {idType}
-                      </option>
-                    ),
-                  )}
-                </select>
-
-                <select
-                  value={categoryFilter}
-                  onChange={(event) =>
-                    setCategoryFilter(event.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-amber-400"
-                >
-                  <option value="ALL">All Categories</option>
-                  <option value="Normal">Normal</option>
-                  <option value="Standard">Standard</option>
-                  <option value="VIP">VIP</option>
-                  <option value="VVIP">VVIP</option>
-                </select>
+                <p className="self-center text-xs text-slate-500">Identity and category filters are unavailable in the directory.</p>
               </div>
             </div>
           </div>
@@ -844,7 +722,7 @@ const CustomersKyc = () => {
                     <>
                       <TableHeading text="Lifetime Buy-In" />
                       <TableHeading text="Lifetime Cash-Out" />
-                      <TableHeading text="Net W/L" />
+                      <TableHeading text="Financial Summary" />
                     </>
                   )}
 
@@ -905,15 +783,15 @@ const CustomersKyc = () => {
                       {isDirectorView && (
                         <>
                           <TableCell
-                            value="—"
+                            value={UNAVAILABLE}
                           />
 
                           <TableCell
-                            value="—"
+                            value={UNAVAILABLE}
                           />
 
                           <td className="px-4 py-4 text-sm font-black text-slate-500">
-                            —
+                            Unavailable
                           </td>
                         </>
                       )}
@@ -996,14 +874,15 @@ const CustomersKyc = () => {
 
           <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              Showing {filteredCustomers.length} of {customers.length}{' '}
-              customers
+              {directoryAvailable
+                ? `Showing ${filteredCustomers.length} of ${customers.length} customers`
+                : isLoadingCustomers ? 'Loading customer directory…' : 'Customer directory unavailable'}
             </span>
 
             <span>
               View mode:{' '}
               <strong>
-                {isDirectorView ? 'Director / Admin' : 'Reception User'}
+                {isDirectorView ? 'Management View' : 'Reception User'}
               </strong>
             </span>
           </div>
@@ -1011,7 +890,7 @@ const CustomersKyc = () => {
       </main>
 
       {showCustomerModal && (
-        <ModalOverlay onClose={() => setShowCustomerModal(false)}>
+        <ModalOverlay onClose={() => !registrationPending.current && setShowCustomerModal(false)}>
           <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
             <ModalHeader
               title={
@@ -1020,7 +899,7 @@ const CustomersKyc = () => {
                   : 'New Customer Registration'
               }
               description="Create or update the permanent customer master record."
-              onClose={() => setShowCustomerModal(false)}
+              onClose={() => !registrationPending.current && setShowCustomerModal(false)}
             />
 
             <div className="max-h-[75vh] overflow-y-auto p-5">
@@ -1301,7 +1180,7 @@ const CustomersKyc = () => {
                   <ProfileSection title="Visit information">
                     <DetailGrid fields={[
                       ['Total visits', safeNumber(customerProfile.totalVisits)],
-                      ['Last visit business date', customerProfile.lastVisitBusinessDate || 'No visits'],
+                      ['Last visit business date', lastVisitLabel(customerProfile.totalVisits, customerProfile.lastVisitBusinessDate)],
                       ['Last entry time', formatDateTime(customerProfile.lastEntryTime)],
                       ['Currently inside', customerProfile.hasActiveSession ? 'Yes' : 'No'],
                       ['Active session', customerProfile.activeSessionId],

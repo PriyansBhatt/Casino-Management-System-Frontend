@@ -1,11 +1,13 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
 import Sidebar from './Sidebar'
+import { isCustomersRoute } from '../../utils/customersKyc'
 
 const MainLayout = ({ children }) => {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isManagementDashboard = pathname === '/dashboard'
+  const isCustomerDirectory = isCustomersRoute(pathname)
   const isReception = pathname === '/reception' || pathname.startsWith('/reception/')
   const { user, logout } = useAuth()
 
@@ -47,14 +49,14 @@ const MainLayout = ({ children }) => {
             />
           </div>
 
-          {!isReception && <div className="hidden rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2 text-sm font-extrabold text-yellow-700 lg:block">
+          {!isReception && !isCustomerDirectory && <div className="hidden rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2 text-sm font-extrabold text-yellow-700 lg:block">
             SHIFT · Day 13:00–23:00
           </div>}
 
           </>}
 
           <div className="ml-auto flex items-center gap-3">
-            {!isManagementDashboard && !isReception && <button
+            {!isManagementDashboard && !isReception && !isCustomerDirectory && <button
               type="button"
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
             >
