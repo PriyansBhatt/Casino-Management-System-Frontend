@@ -1,12 +1,14 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
 import Sidebar from './Sidebar'
+import { isBuyInRoute } from '../../utils/buyIn'
 import { isCustomersRoute } from '../../utils/customersKyc'
 
 const MainLayout = ({ children }) => {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isManagementDashboard = pathname === '/dashboard'
+  const isBuyIn = isBuyInRoute(pathname)
   const isCustomerDirectory = isCustomersRoute(pathname)
   const isReception = pathname === '/reception' || pathname.startsWith('/reception/')
   const { user, logout } = useAuth()
@@ -31,8 +33,8 @@ const MainLayout = ({ children }) => {
 
       <div className="min-h-screen pl-[280px]">
         <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 border-b border-slate-200 bg-white px-6">
-          {isManagementDashboard ? (
-            <p className="text-sm font-bold text-slate-600">Management overview</p>
+          {isManagementDashboard || isBuyIn ? (
+            <p className="text-sm font-bold text-slate-600">{isBuyIn ? 'Cash Collection & Buy-In' : 'Management overview'}</p>
           ) : <>
           <button
             type="button"
@@ -56,7 +58,7 @@ const MainLayout = ({ children }) => {
           </>}
 
           <div className="ml-auto flex items-center gap-3">
-            {!isManagementDashboard && !isReception && !isCustomerDirectory && <button
+            {!isManagementDashboard && !isBuyIn && !isReception && !isCustomerDirectory && <button
               type="button"
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
             >
