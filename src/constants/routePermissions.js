@@ -59,7 +59,7 @@ export const ROUTE_PERMISSIONS = {
   '/reception/customers/:id/edit': RECEPTION_ROLES,
   '/cashier/buy-in': ['CASHIER', 'DIRECTOR', 'SUPER_ADMIN'],
   '/chip-control': CHIP_CONTROL_ROLES,
-  '/cashier/cash-out': CASHIER_ROLES,
+  '/cashier/cash-out': [ROLES.CASHIER, ROLES.DIRECTOR, ROLES.SUPER_ADMIN],
   '/cashier/wallet-transactions': CASHIER_ROLES,
   '/cashier/daily-report': CASHIER_ROLES,
   '/cashier/reconciliation': CASHIER_RECONCILIATION_ROLES,
