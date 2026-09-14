@@ -1,225 +1,209 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import cashierApi from '../../api/cashierApi'
-import { ROLES } from '../../constants/roles'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import api from '../../api/reconciliationApi'
 import useAuth from '../../hooks/useAuth'
-import useBusinessStatus from '../../hooks/useBusinessStatus'
-import useToast from '../../hooks/useToast'
+import { lifecycleAllows } from '../../utils/chipControl'
+import { NOTES, emptyCounts, money, recordedTime, canOperate, canManage, lifecycleLabel, resultLabel,
+  CASH_PAID_DETAIL, noteCount, openingAmount, reconciliation, opening, loadReconciliation, ready,
+  resetDraft, frozenCount, requestGuard, createReconciliationSubmission } from '../../utils/cashierReconciliation'
 
-const DENOMINATIONS = [1000, 500, 100, 50, 20, 10, 5]
-const emptyCounts = Object.fromEntries(DENOMINATIONS.map((value) => [value, 0]))
-const money = (value) => value == null ? 'Unavailable' : `NPR ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const errorMessage = (error, fallback) => error?.response?.data?.message || error?.message || fallback
-const newKey = () => globalThis.crypto?.randomUUID?.() || `reconciliation-${Date.now()}-${Math.random()}`
+const errorText = (e) => e?.response?.data?.message || e?.message || 'Authoritative data unavailable.'
+const field = 'mt-2 w-full rounded-lg border border-slate-300 p-3 disabled:bg-slate-100'
+const button = 'rounded-lg border border-slate-300 px-4 py-2 font-semibold disabled:opacity-50'
+const Summary = ({ label, value, detail }) => <article className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-600">{label}</p><p className="mt-2 text-xl font-bold">{value}</p>{detail && <p className="mt-2 text-xs text-slate-500">{detail}</p>}</article>
+const Tender = ({ title, values, cashOnly = false }) => <section className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="font-bold">{title}</h3><div className="mt-3 grid gap-3 sm:grid-cols-2">{(cashOnly ? ['CASH'] : ['CASH','BANK','CARD','QR']).map((mode) => <div className="rounded bg-slate-50 p-3" key={mode}><p className="text-xs font-bold">{mode}</p><p>{money(values?.[mode]?.amount)}</p><p className="text-xs">{values?.[mode]?.count ?? 'Unavailable'} transaction(s)</p></div>)}</div></section>
 
-const SummaryCard = ({ label, value, detail }) => (
-  <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
-    <p className="mt-3 font-serif text-xl font-black text-slate-950">{value}</p>
-    {detail && <p className="mt-1 text-xs text-slate-500">{detail}</p>}
-  </article>
-)
-
-const TenderCard = ({ title, tenders = {} }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <h2 className="font-serif text-xl font-black text-slate-950">{title}</h2>
-    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {['CASH', 'BANK', 'CARD', 'QR'].map((mode) => (
-        <div key={mode} className="rounded-xl bg-slate-50 p-3">
-          <p className="text-[10px] font-black tracking-wider text-slate-500">{mode}</p>
-          <p className="mt-1 font-bold text-slate-900">{money(tenders[mode]?.amount ?? 0)}</p>
-          <p className="text-xs text-slate-500">{tenders[mode]?.count ?? 0} transaction(s)</p>
-        </div>
-      ))}
-    </div>
-  </section>
-)
-
-const CashierReconciliation = () => {
+export default function CashierReconciliation() {
   const { user } = useAuth()
-  const { isSystemLocked } = useBusinessStatus()
-  const { showToast } = useToast()
-  const [record, setRecord] = useState(null)
-  const [openingBalance, setOpeningBalance] = useState(null)
-  const [openingBalanceInput, setOpeningBalanceInput] = useState('')
-  const [denominations, setDenominations] = useState(emptyCounts)
-  const [remarks, setRemarks] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [working, setWorking] = useState(false)
-  const [creatingOpeningBalance, setCreatingOpeningBalance] = useState(false)
-  const [error, setError] = useState('')
-  const [reviewRecords, setReviewRecords] = useState([])
-  const keyRef = useRef(newKey())
+  const role = user?.role, username = user?.username
+  const [scope, setScope] = useState(null), [loading, setLoading] = useState(true)
+  const [counts, setCounts] = useState(emptyCounts), [remarks, setRemarks] = useState('')
+  const [openingInput, setOpeningInput] = useState(''), [preview, setPreview] = useState(null)
+  const [reviewed, setReviewed] = useState(false), [working, setWorking] = useState(false)
+  const [error, setError] = useState(''), [notice, setNotice] = useState(''), [success, setSuccess] = useState(null)
+  const [warning, setWarning] = useState(''), [reopenReasons, setReopenReasons] = useState({})
+  const loadGuard = useRef(requestGuard()), previewGuard = useRef(requestGuard())
+  const lastScope = useRef(null), busy = useRef(false), mounted = useRef(true)
+  const submission = useRef(createReconciliationSubmission())
+
+  const load = useCallback(async (force = false) => {
+    if (!force && (busy.current || submission.current.pending || submission.current.uncertain)) return
+    const current = loadGuard.current.next(); previewGuard.current.invalidate()
+    setLoading(true); setScope(null); setPreview(null); setError('')
+    try {
+      const next = await loadReconciliation(api, role, username)
+      if (!current() || !mounted.current) return
+      if (resetDraft(lastScope.current, next)) {
+        setCounts(emptyCounts()); setRemarks(''); setReviewed(false); setOpeningInput(''); setReopenReasons({})
+        if (lastScope.current?.date && lastScope.current.date !== next.date) setNotice('Business Date changed. Previous counts and preview were discarded. Recount and review for the new date.')
+        else if (lastScope.current?.record?.lifecycleStatus !== next.record?.lifecycleStatus) setNotice('Reconciliation state changed. Review the current record and recount before a new submission.')
+      }
+      lastScope.current = next; setScope(next)
+      if (Object.keys(next.errors).length || !next.date) {
+        setReviewed(false); setCounts(emptyCounts()); setRemarks('')
+        setNotice('Some authoritative prerequisites are unavailable. Refresh and review the count before posting.')
+      }
+      if (force && (Object.keys(next.errors).length || !next.date)) throw new Error('Authoritative refresh incomplete.')
+      return next
+    } catch (e) {
+      if (current() && mounted.current) {
+        setScope(null); setCounts(emptyCounts()); setRemarks(''); setReviewed(false); setError(errorText(e))
+      }
+      if (force) throw e
+    } finally { if (current() && mounted.current) setLoading(false) }
+  }, [role, username])
+
+  useEffect(() => {
+    mounted.current = true; load()
+    const focus = () => load(), interval = setInterval(focus, 45000)
+    window.addEventListener('focus', focus)
+    return () => { mounted.current = false; clearInterval(interval); window.removeEventListener('focus', focus); loadGuard.current.invalidate(); previewGuard.current.invalidate() }
+  }, [load])
+
+  const record = scope?.record, shown = preview || record
+  const uncertain = submission.current.uncertain
+  const controlsLocked = loading || working || uncertain
+  const operational = ready(scope, role) && !controlsLocked
   const submitted = record?.lifecycleStatus === 'SUBMITTED'
-  const canReopen = user?.role === ROLES.DIRECTOR || user?.role === ROLES.SUPER_ADMIN
-  const canSubmit = user?.role === ROLES.CASHIER || user?.role === ROLES.SUPER_ADMIN
-  const actualCount = useMemo(() => DENOMINATIONS.reduce((sum, value) => sum + value * Number(denominations[value] || 0), 0), [denominations])
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
+  const snapshot = shown?.calculationBasis?.endsWith('SNAPSHOT')
+  let countTotal = null
+  try { countTotal = noteCount(counts).total } catch { /* Invalid input is not a zero. */ }
+  const editCount = (note, raw) => {
+    if (controlsLocked || submitted) return
     try {
-      const [data, currentOpeningBalance] = await Promise.all([
-        cashierApi.getCurrentCashierReconciliation(),
-        cashierApi.getCurrentCashierOpeningBalance(),
-      ])
-      setRecord(data)
-      setOpeningBalance(currentOpeningBalance || null)
-      if (data?.id) {
-        setDenominations({ ...emptyCounts, ...(data.denominations || {}) })
-        setRemarks(data.remarks || '')
-      }
-      if (user?.role === ROLES.DIRECTOR || user?.role === ROLES.SUPER_ADMIN) {
-        setReviewRecords(await cashierApi.getSubmittedCashierReconciliations())
-      }
-    } catch (requestError) {
-      setError(errorMessage(requestError, 'Unable to load cashier reconciliation.'))
-    } finally {
-      setLoading(false)
-    }
-  }, [user?.role])
-
-  useEffect(() => { load() }, [load])
-
-  const changeCount = (denomination, rawValue) => {
-    const quantity = rawValue === '' ? 0 : Number(rawValue)
-    if (!Number.isInteger(quantity) || quantity < 0) return
-    setDenominations((current) => ({ ...current, [denomination]: quantity }))
-    setRecord((current) => current?.id ? current : { ...current, expectedClosingCash: null, variance: null })
-    keyRef.current = newKey()
+      noteCount({ [note]: raw })
+      previewGuard.current.invalidate(); setPreview(null); setReviewed(false)
+      setCounts((old) => ({ ...old, [note]: raw })); setError(''); setNotice('Count changed. Any previous calculation is invalid; calculate again and review.')
+    } catch (e) { setError(errorText(e)) }
   }
-
-  const payload = () => ({ denominations, remarks: remarks.trim() || null, idempotencyKey: keyRef.current })
-  const validate = () => {
-    if (!openingBalance) {
-      setError('Opening Cash must be established before reconciliation can be calculated or submitted.')
-      return false
+  const preflight = async (date, settlement = true) => {
+    const latest = await loadReconciliation(api, role, username)
+    if (latest.date !== date) {
+      loadGuard.current.invalidate(); previewGuard.current.invalidate()
+      setScope(null); setCounts(emptyCounts()); setRemarks(''); setPreview(null); setReviewed(false)
+      setNotice('Business Date changed. Refresh and recount; the old count was not submitted.')
+      throw new Error('Business Date changed. Refresh before continuing.')
     }
-    return true
+    if (!ready(latest, role, settlement)) throw new Error('Posting unavailable: check lifecycle, System Lock, reconciliation state and authoritative prerequisites.')
+    return latest
   }
-  const establishOpeningBalance = async () => {
-    const amount = Number(openingBalanceInput)
-    if (openingBalanceInput === '' || !Number.isFinite(amount) || amount < 0) {
-      setError('Enter a valid non-negative Opening Cash amount.')
-      return
-    }
-    const businessDate = record?.businessDate || 'the current Business Date'
-    if (!window.confirm(`Set opening cash to ${money(amount)} for Business Date ${businessDate}? This becomes the authoritative opening balance for this cashier.`)) return
-    if (isSystemLocked) {
-      setError('System is locked. Opening Cash cannot be established.')
-      return
-    }
-    setCreatingOpeningBalance(true); setError('')
+  const calculate = async () => {
+    if (busy.current || submission.current.pending || !operational || !scope.opening) return
+    busy.current = true; setWorking(true); setError('')
+    const current = previewGuard.current.next()
     try {
-      await cashierApi.createCurrentCashierOpeningBalance(amount)
-      showToast({ type: 'success', title: 'Opening Cash established', message: `${money(amount)} is now authoritative for ${businessDate}.` })
-      setOpeningBalanceInput('')
-      await load()
-    } catch (requestError) {
-      const message = errorMessage(requestError, 'Unable to establish Opening Cash.')
-      setError(message)
-      showToast({ type: 'error', title: 'Opening Cash failed', message })
-    } finally {
-      setCreatingOpeningBalance(false)
-    }
-  }
-  const preview = async () => {
-    if (!validate()) return
-    setWorking(true); setError('')
-    try { setRecord(await cashierApi.previewCashierReconciliation(payload())) }
-    catch (requestError) { setError(errorMessage(requestError, 'Unable to calculate reconciliation.')) }
-    finally { setWorking(false) }
+      const target = frozenCount(scope.date, counts, remarks, crypto.randomUUID())
+      await preflight(target.expectedBusinessDate)
+      const value = reconciliation(await api.preview(target), target.expectedBusinessDate)
+      if (value.calculationBasis !== 'PREVIEW') throw new Error('Preview response unavailable.')
+      if (current() && mounted.current) setPreview(value)
+    } catch (e) { if (current() && mounted.current) { setPreview(null); setError(errorText(e)) } }
+    finally { busy.current = false; if (mounted.current) setWorking(false) }
   }
   const submit = async () => {
-    if (!validate()) return
-    if (isSystemLocked) { setError('System is locked. Reconciliation cannot be submitted.'); return }
-    setWorking(true); setError('')
+    if (busy.current || submission.current.pending || !canOperate(role)) return
+    if (!uncertain && (!operational || !scope.opening || !reviewed)) return
+    busy.current = true; setWorking(true); setError(''); setWarning('')
     try {
-      const data = await cashierApi.submitCashierReconciliation(payload())
-      setRecord(data)
-      showToast({ type: 'success', title: 'Reconciliation submitted', message: `${data.status} for ${data.businessDate}.` })
-    } catch (requestError) {
-      const message = errorMessage(requestError, 'Unable to submit reconciliation.')
-      setError(message)
-      showToast({ type: 'error', title: 'Submission failed', message })
-    } finally { setWorking(false) }
+      await submission.current.run({ date: scope?.date, counts, remarks }, {
+        preflight: (target) => preflight(target.expectedBusinessDate), post: api.submit,
+        success: (value) => { if (mounted.current) { setSuccess({ title: 'Reconciliation Submitted', value }); setPreview(null); setReviewed(false) } },
+        refresh: () => load(true), warning: (text) => { if (mounted.current) setWarning(text) },
+      })
+    } catch (e) {
+      if (mounted.current) {
+        setError(errorText(e))
+        if (!submission.current.uncertain) { setScope(null); setPreview(null); setCounts(emptyCounts()); setReviewed(false) }
+      }
+    }
+    finally { busy.current = false; if (mounted.current) setWorking(false) }
   }
-  const reopen = async (item) => {
-    const reason = window.prompt('Reason for reopening this reconciliation:')
-    if (!reason?.trim()) return
-    setWorking(true); setError('')
+  const establish = async () => {
+    if (busy.current || submission.current.pending || !ready(scope, role, false) || controlsLocked || scope.opening) return
+    let amount
+    try { amount = openingAmount(openingInput) } catch (e) { setError(errorText(e)); return }
+    if (!window.confirm(`Establish NPR ${amount} for your account on Business Date ${scope.date}? This can only be set once, before financial activity.`)) return
+    busy.current = true; setWorking(true); setError(''); setWarning('')
+    let confirmed = false
     try {
-      await cashierApi.reopenCashierReconciliation(item.id, reason.trim())
-      showToast({ type: 'success', title: 'Reconciliation reopened', message: `Posting restored for ${item.cashierUsername}.` })
-      await load()
-    } catch (requestError) {
-      const message = errorMessage(requestError, 'Unable to reopen reconciliation.')
-      setError(message); showToast({ type: 'error', title: 'Reopen failed', message })
-    } finally { setWorking(false) }
+      const target = Object.freeze({ openingCashAmount: amount, expectedBusinessDate: scope.date })
+      await preflight(target.expectedBusinessDate, false)
+      const value = await api.establish(target); confirmed = true
+      setSuccess({ title: 'Opening Cash established', value: { businessDate: target.expectedBusinessDate } }); setOpeningInput('')
+      try { opening(value, target.expectedBusinessDate); if (!value) throw new Error() }
+      catch { setWarning('Opening Cash creation confirmed; response details unavailable. Refresh to verify. Do not create it again.') }
+      try { await load(true) } catch { setWarning('Opening Cash established, but refresh failed. Refresh to verify; do not create it again.') }
+    } catch (e) {
+      if (!confirmed) { setError(`${errorText(e)} Refresh before retrying; an uncertain opening request may already have been saved.`); setScope(null); setReviewed(false) }
+    } finally { busy.current = false; if (mounted.current) setWorking(false) }
+  }
+  const reopen = async (row) => {
+    if (busy.current || controlsLocked || !canManage(role) || row.lifecycleStatus !== 'SUBMITTED') return
+    const reason = reopenReasons[row.id]?.trim()
+    if (!reason) { setError('A reopen reason is required.'); return }
+    if (!window.confirm(`Reopen ${row.cashierUsername}'s submitted reconciliation for ${row.businessDate}?`)) return
+    busy.current = true; setWorking(true); setError(''); setWarning('')
+    let confirmed = false
+    try {
+      const latest = await loadReconciliation(api, role, username)
+      if (latest.date !== row.businessDate || !lifecycleAllows(latest.status, true)) throw new Error('Business Date/status changed. Refresh before reopening.')
+      const value = await api.reopen(row.id, reason)
+      // The transport succeeded: never report a later read failure as a failed reopen.
+      confirmed = true
+      setSuccess({ title: 'Reopen request accepted', value: { businessDate: row.businessDate } })
+      try { reconciliation(value, row.businessDate); if (value.lifecycleStatus !== 'REOPENED') throw new Error() }
+      catch { setWarning('Reopen response could not be verified. Refresh before attempting another action.') }
+      try { await load(true) } catch { setWarning('Reopen request accepted; refresh failed. Refresh to verify current lifecycle.') }
+    } catch (e) { if (!confirmed) { setError(errorText(e)); setScope(null) } }
+    finally { busy.current = false; if (mounted.current) setWorking(false) }
   }
 
-  if (loading) return <div className="p-6 text-sm text-slate-500">Loading cashier reconciliation…</div>
+  return <div className="space-y-5">
+    <header className="rounded-2xl bg-slate-950 p-5 text-white"><p className="text-xs font-bold uppercase text-amber-300">Cashier Operations</p><h1 className="text-3xl font-bold">Cashier Reconciliation</h1>
+      <p className="mt-2">Business Date: {scope?.date || 'Unavailable'} · {canOperate(role) ? `Own cashier account: ${record?.cashierName || record?.cashierUsername || username || 'Unavailable'}` : 'Management review'}</p>
+      <p className="mt-2">{scope?.status ? `${scope.status.businessDateHealth} · ${scope.status.systemLocked ? 'System Locked' : 'Backend status verified'}` : 'Operational status unavailable'}</p>
+      {canOperate(role) && <p>{lifecycleLabel(record?.lifecycleStatus)} · Result: {resultLabel(shown?.status)}</p>}
+    </header>
+    <div className="flex items-center gap-3"><button className={button} disabled={controlsLocked} onClick={() => load()}>Refresh authoritative data</button><span role="status" aria-live="polite">{loading ? 'Loading authoritative prerequisites…' : working ? 'Processing frozen request…' : 'Date revalidated on focus and every 45 seconds.'}</span></div>
+    {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">{error}</p>}
+    {notice && <p role="status" className="rounded-lg bg-blue-50 p-3">{notice}</p>}
+    {scope && Object.entries(scope.errors).map(([key,text]) => <p role="alert" key={key}>{key} unavailable: {text}</p>)}
+    {success && <section role="status" className="rounded-xl bg-green-50 p-4"><strong>{success.title}</strong><p>Business Date {success.value.businessDate}{success.value.lifecycleStatus === 'SUBMITTED' && ` · ${resultLabel(success.value.status)} · Actual ${money(success.value.actualClosingCash)} · Variance ${money(success.value.variance)}`}</p></section>}
+    {warning && <p role="alert" className="rounded bg-amber-50 p-3">{warning}</p>}
+    {uncertain && <section className="rounded-lg border border-amber-400 p-4"><p role="alert">Submission outcome unconfirmed. Keep this page open. Your frozen date, count and reference are retained; edits are disabled.</p><button className={button} disabled={working} onClick={submit}>Retry unchanged submission</button></section>}
 
-  return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="rounded-2xl bg-slate-950 p-5 text-white shadow-lg">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Cashier Operations</p>
-            <h1 className="mt-1 font-serif text-3xl font-black">Cashier Reconciliation</h1>
-            <p className="mt-2 text-sm text-slate-300">Business Date: {record?.businessDate || 'Unavailable'} · Cashier: {record?.cashierName || record?.cashierUsername || user?.username || 'Unavailable'}</p>
-          </div>
-          <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-black">{record?.status || 'UNAVAILABLE'} · {record?.lifecycleStatus || 'OPEN'}{isSystemLocked ? ' · SYSTEM LOCKED' : ''}</span>
-        </div>
-      </header>
-
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <SummaryCard label="Opening Cash" value={money(record?.openingCash ?? openingBalance?.openingCashAmount)} detail={openingBalance ? 'Persisted authoritative balance' : record?.id ? 'Persisted reconciliation snapshot' : 'Not established'} />
-        <SummaryCard label="Cash Received" value={money(record?.physicalCashReceived)} detail="Persisted CASH buy-ins" />
-        <SummaryCard label="Cash Paid" value={money(record?.physicalCashPaid)} detail="Persisted CASH cash-outs" />
-        <SummaryCard label="Expected Closing" value={money(record?.expectedClosingCash)} />
-        <SummaryCard label="Actual Closing" value={money(record?.actualClosingCash ?? actualCount)} />
-        <SummaryCard label="Variance" value={money(record?.variance)} detail={record?.status} />
+    {canOperate(role) && <>
+      <p className="rounded-xl bg-slate-100 p-4 font-semibold">Opening Cash + CASH Received − CASH Paid = Expected Closing<br />Actual Physical Cash − Expected Closing = Variance</p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <Summary label="Opening Cash" value={money(shown?.openingCash)} detail={scope?.opening ? 'Persisted set-once balance' : 'Not established / unavailable'} />
+        <Summary label="Cash Received" value={money(shown?.physicalCashReceived)} detail="CASH Buy-Ins only" />
+        <Summary label="Cash Paid" value={money(shown?.physicalCashPaid)} detail={CASH_PAID_DETAIL} />
+        <Summary label="Expected Closing" value={money(shown?.expectedClosingCash)} />
+        <Summary label="Actual Closing" value={money(shown?.actualClosingCash)} detail={preview ? 'Backend preview' : snapshot ? 'Saved submission' : 'Calculate after counting'} />
+        <Summary label="Variance" value={money(shown?.variance)} detail={resultLabel(shown?.status)} />
+      </div>
+      {snapshot ? <p className="rounded bg-amber-50 p-3">Saved submission values. Tender totals were not stored with this submission and are unavailable in this review; they are not reconstructed from later activity.</p>
+        : <><p className="text-sm text-slate-600">Tender summaries are informational. BANK, CARD and QR do not affect physical Expected Closing.</p><div className="grid gap-4 xl:grid-cols-3"><Tender title="Buy-In tender summary" values={shown?.buyInTenders} /><Tender title="Cash-Out tender summary" values={shown?.cashOutTenders} /><Tender title="Losing Return — CASH payouts only" values={shown?.losingReturnTenders} cashOnly /></div></>}
+      {record && !scope.errors.opening && !scope.opening && !submitted && <section className="rounded-xl border border-amber-300 bg-amber-50 p-5"><h2 className="text-xl font-bold">Establish Opening Cash</h2><p>Set once for your account and this Business Date, before any Buy-In, Cash-Out or Losing Return. Financial activity already posted prevents establishment; RC1 does not provide a correction override.</p><label className="mt-3 block">Opening Cash (NPR)<input className={field} inputMode="decimal" value={openingInput} disabled={controlsLocked || !ready(scope, role, false)} onChange={(e) => setOpeningInput(e.target.value)} /></label><button className={`${button} mt-3`} disabled={controlsLocked || !ready(scope, role, false)} onClick={establish}>Set Opening Cash</button>{!ready(scope, role, false) && <p>New-operation lifecycle or System Lock prerequisites do not permit establishing Opening Cash.</p>}</section>}
+      <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-bold">Actual physical note count</h2><p>Local counting aid: {money(countTotal)}. The backend independently recalculates Actual Closing and Variance.</p>
+        {submitted ? <p className="mt-3">Saved notes: {Object.entries(record.denominations).map(([n,q]) => `NPR ${n} × ${q}`).join(', ') || 'Authoritative zero notes'}</p>
+          : <div className="mt-4 grid gap-3 sm:grid-cols-4 xl:grid-cols-7">{NOTES.map((n) => <label key={n}>NPR {n.toLocaleString()}<input aria-label={`NPR ${n} note quantity`} className={field} type="number" min="0" max="2147483647" step="1" value={counts[n] ?? 0} disabled={controlsLocked || !record} onChange={(e) => editCount(n, e.target.value)} /></label>)}</div>}
+        <label className="mt-4 block">Remarks<input className={field} maxLength={1000} value={remarks} disabled={controlsLocked || submitted || !record} onChange={(e) => { previewGuard.current.invalidate(); setPreview(null); setReviewed(false); setRemarks(e.target.value) }} /></label>
+        {preview && <p role="status" className="mt-3">Backend preview only. Submit recalculates current transaction totals.</p>}
+        {!submitted && <label className="my-4 flex gap-2"><input type="checkbox" checked={reviewed} disabled={controlsLocked || !record} onChange={(e) => setReviewed(e.target.checked)} />I reviewed this physical count for Business Date {scope?.date || 'Unavailable'}.</label>}
+        <div className="mt-4 flex flex-wrap gap-3"><button className={button} disabled={!operational || !scope?.opening} onClick={calculate}>Calculate preview</button><button className={`${button} bg-amber-400`} disabled={!operational || !scope?.opening || !reviewed || countTotal === null} onClick={submit}>Submit Reconciliation</button></div>
+        {!operational && <p className="mt-2 text-sm">Posting disabled while prerequisites are unavailable, the System is locked, a request is pending, or reconciliation is Submitted.</p>}
       </section>
-      <div className="grid gap-5 xl:grid-cols-3"><TenderCard title="Buy-In Tender Summary" tenders={record?.buyInTenders} /><TenderCard title="Cash-Out Tender Summary" tenders={record?.cashOutTenders} /><TenderCard title="Losing Return Tender Summary" tenders={record?.losingReturnTenders} /></div>
+    </>}
 
-      {!openingBalance && !record?.id && <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
-        <h2 className="font-serif text-xl font-black text-slate-950">Opening Cash Required</h2>
-        <p className="mt-2 text-sm text-slate-700">Opening Cash must be established before reconciliation can calculate Expected Closing and Variance.</p>
-        {canSubmit ? <div className="mt-4 flex flex-wrap items-end gap-3">
-          <label className="w-full max-w-xs"><span className="text-xs font-black uppercase tracking-wider text-slate-600">Opening Cash Amount (NPR)</span><input type="number" min="0" step="0.01" disabled={creatingOpeningBalance || isSystemLocked} value={openingBalanceInput} onChange={(event) => setOpeningBalanceInput(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 outline-none focus:border-amber-500 disabled:bg-slate-100" /></label>
-          <button type="button" disabled={creatingOpeningBalance || isSystemLocked} onClick={establishOpeningBalance} className="h-11 rounded-xl bg-amber-500 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{creatingOpeningBalance ? 'Setting…' : 'Set Opening Cash'}</button>
-          {isSystemLocked && <p className="w-full text-sm font-semibold text-red-700">System Lock must be cleared before Opening Cash can be established.</p>}
-        </div> : <p className="mt-4 text-sm font-semibold text-slate-600">Opening Cash has not been established. Director access is review-only.</p>}
-      </section>}
-
-      {canReopen && reviewRecords.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="font-serif text-xl font-black text-slate-950">Current Business Date Submissions</h2><div className="mt-4 space-y-3">{reviewRecords.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4"><div><p className="font-bold text-slate-900">{item.cashierName || item.cashierUsername}</p><p className="text-xs text-slate-500">{item.status} · {item.lifecycleStatus} · {money(item.variance)}</p></div>{item.lifecycleStatus === 'SUBMITTED' && <button type="button" disabled={working || isSystemLocked} onClick={() => reopen(item)} className="rounded-xl border border-amber-400 px-4 py-2 text-sm font-black text-amber-700 disabled:opacity-50">Reopen Reconciliation</button>}</div>)}</div></section>}
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="font-serif text-xl font-black text-slate-950">Actual Cash Count</h2><p className="text-sm text-slate-500">Count physical NPR notes. The backend recalculates the authoritative total.</p></div>
-          <p className="text-xl font-black text-slate-950">{money(actualCount)}</p>
-        </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-          {DENOMINATIONS.map((value) => (
-            <label key={value} className="rounded-xl border border-slate-200 p-3">
-              <span className="text-xs font-black text-slate-600">NPR {value.toLocaleString()}</span>
-              <input type="number" min="0" step="1" disabled={submitted || !canSubmit} value={denominations[value] ?? 0} onChange={(event) => changeCount(value, event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-slate-200 px-3 text-right font-bold outline-none focus:border-amber-400 disabled:bg-slate-100" />
-            </label>
-          ))}
-        </div>
-        <div className="mt-5">
-          <label><span className="text-xs font-black uppercase tracking-wider text-slate-500">Remarks</span><input maxLength="1000" disabled={submitted || !canSubmit} value={remarks} onChange={(event) => { setRemarks(event.target.value); keyRef.current = newKey() }} className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-3 outline-none focus:border-amber-400 disabled:bg-slate-100" /></label>
-        </div>
-        <div className="mt-5 flex flex-wrap justify-end gap-3">
-          {!canSubmit && <p className="mr-auto text-sm text-slate-500">Review-only access. Reconciliation is tied to your authenticated account.</p>}
-          {!submitted && canSubmit && <><button type="button" onClick={preview} disabled={working} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Calculate</button><button type="button" onClick={submit} disabled={working || isSystemLocked} className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{working ? 'Working…' : 'Submit Reconciliation'}</button></>}
-          {submitted && <p className="text-sm font-semibold text-emerald-700">Submitted {record.submittedAt ? new Date(record.submittedAt).toLocaleString() : ''}</p>}
-        </div>
-      </section>
-      <p className="text-xs text-slate-500">Machine cash-in, tips, expenses, deposits and manual adjustments are excluded because no authoritative persisted backend source exists yet.</p>
-    </div>
-  )
+    {canManage(role) && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-bold">Current Business Date management review</h2><p className="text-sm">Saved last-submission figures for each cashier. Reopened rows retain those saved review figures; the cashier must recount against live totals. No approval/rejection workflow.</p>
+      {loading ? <p role="status">Loading management records…</p> : scope?.management == null ? <p>Management records unavailable.</p> : scope.management.length === 0 ? <p>No persisted reconciliations for this Business Date.</p>
+        : <div className="mt-4 space-y-4">{scope.management.map((row) => <article key={row.id} className="rounded-lg border p-4"><div className="flex flex-wrap justify-between gap-3"><h3 className="font-bold">{row.cashierName || row.cashierUsername} · {row.businessDate}</h3><p>{lifecycleLabel(row.lifecycleStatus)} · {resultLabel(row.status)}</p></div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-4"><p>Opening: {money(row.openingCash)}</p><p>Expected: {money(row.expectedClosingCash)}</p><p>Actual: {money(row.actualClosingCash)}</p><p>Variance: {money(row.variance)}</p></div>
+          <p className="mt-2 text-sm">Submitted: {recordedTime(row.submittedAt)}</p>{row.reopenedAt && <p className="text-sm">Reopened: {recordedTime(row.reopenedAt)} · Reason: {row.reopenReason || 'Unavailable'}</p>}
+          <details className="mt-2 text-sm"><summary>Saved note count and reference</summary><p>{Object.entries(row.denominations).map(([n,q]) => `NPR ${n} × ${q}`).join(', ') || 'Zero notes'}</p><p>Remarks: {row.remarks || '—'}</p><p className="break-all">{row.id}</p></details>
+          {row.lifecycleStatus === 'SUBMITTED' && <div className="mt-3"><label>Required reopen reason<input className={field} maxLength={1000} disabled={controlsLocked} value={reopenReasons[row.id] || ''} onChange={(e) => setReopenReasons((old) => ({ ...old, [row.id]: e.target.value }))} /></label><button className={`${button} mt-2`} disabled={controlsLocked || !lifecycleAllows(scope.status, true)} onClick={() => reopen(row)}>Reopen Reconciliation</button></div>}
+        </article>)}</div>}
+    </section>}
+    <p className="text-xs text-slate-600">Excluded: machine cash-in, tips, expenses, deposits and manual cash adjustments. No authoritative persisted cashier cash source for these is integrated.</p>
+  </div>
 }
-
-export default CashierReconciliation
