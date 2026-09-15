@@ -30,6 +30,7 @@ const CASHIER_RECONCILIATION_ROLES = [
 
 export const ROUTE_PERMISSIONS = {
   '/dashboard': ALL_ROLES,
+  '/slot-machines': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/attendance': ALL_ROLES,
   '/hr/staff': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/hr/roster': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
