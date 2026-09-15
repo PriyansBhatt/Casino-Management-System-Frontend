@@ -91,6 +91,7 @@ export const ROUTE_PERMISSIONS = {
   '/audit-logs/:id': AUDIT_ROLES,
   '/audit/reports': AUDIT_ROLES,
   '/analytics/management': REPORT_ROLES,
+  '/fnb': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/crm-gre': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/testing/checklist': REPORT_ROLES,
   '/reports': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],

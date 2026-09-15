@@ -523,32 +523,32 @@ const AppRoutes = () => {
 
       <Route
         path="/fnb/dashboard"
-        element={protectedPage(<FnbKitchenBar />)}
+        element={<Navigate to="/fnb" replace />}
       />
 
       <Route
         path="/fnb/new-request"
-        element={protectedPage(<FnbKitchenBar />)}
+        element={<Navigate to="/fnb" replace />}
       />
 
       <Route
         path="/fnb/kitchen-kot"
-        element={protectedPage(<FnbKitchenBar />)}
+        element={<Navigate to="/fnb" replace />}
       />
 
       <Route
         path="/fnb/bar-bot"
-        element={protectedPage(<FnbKitchenBar />)}
+        element={<Navigate to="/fnb" replace />}
       />
 
       <Route
         path="/fnb/manager"
-        element={protectedPage(<FnbKitchenBar />)}
+        element={<Navigate to="/fnb" replace />}
       />
 
       <Route
         path="/fnb/history"
-        element={protectedPage(<FnbKitchenBar />)}
+        element={<Navigate to="/fnb" replace />}
       />
 
       {/* =========================================================
