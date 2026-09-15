@@ -1,126 +1,133 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import pitApi from '../../api/pitApi'
-import { ROLES } from '../../constants/roles'
-import useAuth from '../../hooks/useAuth'
-import useBusinessStatus from '../../hooks/useBusinessStatus'
-import useToast from '../../hooks/useToast'
-import { getErrorMessage } from '../../utils/errorUtils'
-import VerifiedTablePlayers from './VerifiedTablePlayers'
-import PitStaffAssignmentPanel from '../../components/pit/PitStaffAssignmentPanel'
-
-const money = (value) => value == null
-  ? 'Unavailable'
-  : `NPR ${Number(value).toLocaleString('en-IN')}`
-
-const closeRoles = [ROLES.PIT_SUPERVISOR, ROLES.SUPER_ADMIN]
-
-const TableSessionDetails = () => {
-  const navigate = useNavigate()
-  const { tableId } = useParams()
-  const { user } = useAuth()
-  const { isSystemLocked } = useBusinessStatus()
-  const { showToast } = useToast()
-  const [table, setTable] = useState(null)
-  const [reconciliation, setReconciliation] = useState(null)
-  const [summary, setSummary] = useState({ activePlayers: 0, WIN: 0, LOSS: 0 })
-  const [loadError, setLoadError] = useState('')
-  const [actionError, setActionError] = useState('')
-  const [showReconciliation, setShowReconciliation] = useState(false)
-  const [showClose, setShowClose] = useState(false)
-  const [closingFloat, setClosingFloat] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [staff, setStaff] = useState(null)
-
-  const loadTable = useCallback(async () => {
-    const value = await pitApi.getAuthoritativeTable(tableId)
-    setTable(value)
-    setLoadError('')
-    return value
-  }, [tableId])
-
-  const loadReconciliation = useCallback(async () => {
-    const value = await pitApi.getTableReconciliation(tableId)
-    setReconciliation(value)
-    return value
-  }, [tableId])
-
-  useEffect(() => {
-    let active = true
-    Promise.all([pitApi.getAuthoritativeTable(tableId), pitApi.getTableReconciliation(tableId)])
-      .then(([tableValue, reconciliationValue]) => {
-        if (!active) return
-        setTable(tableValue)
-        setReconciliation(reconciliationValue)
-        setLoadError('')
-      })
-      .catch(() => {
-        if (active) setLoadError('Table data could not be loaded. Return to Gaming Floor and reopen the table.')
-      })
-    return () => { active = false }
-  }, [tableId])
-
-  const closeTable = async () => {
-    if (summary.activePlayers > 0) {
-      setActionError('All active customers must leave this table before it can be closed.')
-      return
-    }
-    const numericClosingFloat = Number(closingFloat)
-    if (closingFloat === '' || !Number.isFinite(numericClosingFloat) || numericClosingFloat < 0) {
-      setActionError('Enter a valid closing float of zero or greater.')
-      return
-    }
-    setBusy(true)
-    setActionError('')
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import api from '../../api/pitApi';
+import useAuth from '../../hooks/useAuth';
+import usePitMutation from '../../hooks/usePitMutation';
+import PitMutationStatus from '../../components/pit/PitMutationStatus';
+import PitStaffAssignmentPanel from '../../components/pit/PitStaffAssignmentPanel';
+import DealerTableMode from './DealerTableMode';
+import { money, canManage, requestGuard, lifecycleAllows } from '../../utils/pit';
+import { statusPayload } from '../../utils/chipControl';
+const button = 'rounded border px-3 py-2 font-bold disabled:opacity-40';
+function Operation() {
+  const {
+      tableId
+    } = useParams(),
+    navigate = useNavigate(),
+    {
+      user
+    } = useAuth();
+  const [context, setContext] = useState(null),
+    [error, setError] = useState(''),
+    [loading, setLoading] = useState(true),
+    [closing, setClosing] = useState(''),
+    [review, setReview] = useState(false),
+    [revision, setRevision] = useState(0),
+    [history, setHistory] = useState(null),
+    [historyOpen, setHistoryOpen] = useState(false),
+    [resultHistory, setResultHistory] = useState(null),
+    [historyPlayer, setHistoryPlayer] = useState(null);
+  const guard = useRef(requestGuard()),
+    historyGuard = useRef(requestGuard()),
+    resultGuard = useRef(requestGuard());
+  const load = useCallback(async () => {
+    const current = guard.current.next();
+    setLoading(true);
+    setContext(null);
+    setError('');
     try {
-      await pitApi.closeAuthoritativeTable(tableId, closingFloat)
-      await Promise.all([loadTable(), loadReconciliation()])
-      setShowClose(false)
-      showToast({ type: 'success', title: 'Pit Table Closed', message: `${table.tableCode} is now closed.` })
-    } catch (error) {
-      const message = getErrorMessage(error)
-      setActionError(message)
-      showToast({ type: 'error', title: 'Table Could Not Be Closed', message })
+      const [table, reconciliation, snapshot, raw] = await Promise.all([api.getAuthoritativeTable(tableId), api.getTableReconciliation(tableId), api.getPitTableMode(tableId), api.getOperationalStatus().catch(() => null)]);
+      if (table.id !== tableId || snapshot.operationId !== tableId || reconciliation.tableId !== tableId) throw new Error('Table context unavailable.');
+      let lifecycle = null;
+      try {
+        lifecycle = statusPayload(raw, table.businessDate);
+      } catch {}
+      if (current()) {
+        setContext({
+          table,
+          reconciliation,
+          snapshot,
+          lifecycle
+        });
+        setRevision(r => r + 1);
+      }
+    } catch (e) {
+      if (current()) setError(e.message);
+      throw e;
     } finally {
-      setBusy(false)
+      if (current()) setLoading(false);
     }
-  }
-
-  if (loadError) {
-    return <div className="rounded-2xl border border-red-200 bg-red-50 p-6"><h1 className="text-xl font-black text-red-800">Table unavailable</h1><p className="mt-2 text-sm text-red-700">{loadError}</p><button type="button" onClick={() => navigate('/pit/tables')} className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-black text-white">Return to Gaming Floor</button></div>
-  }
-  if (!table) return <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500">Loading table...</div>
-
-  const isOpen = table.status === 'OPEN'
-  const canClose = closeRoles.includes(user?.role)
-  const activeDealer = staff?.find((entry) => entry.assignmentRole === 'DEALER')
-  const activeSupervisor = staff?.find((entry) => entry.assignmentRole === 'PIT_SUPERVISOR')
-  const staffLabel = staff === null
-    ? 'Unavailable'
-    : `Dealer: ${activeDealer?.fullName || activeDealer?.username || 'Not assigned'} · Supervisor: ${activeSupervisor?.fullName || activeSupervisor?.username || 'Not assigned'}`
-
-  return <div className="space-y-6 pb-12">
-    <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-5 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-3"><button type="button" onClick={() => navigate('/pit/tables')} className="rounded-xl border border-slate-200 px-3 py-2 font-black text-slate-600 hover:bg-slate-50">←</button><div><p className="text-xs font-black uppercase tracking-[0.16em] text-amber-600">Gaming Floor</p><h1 className="mt-1 text-3xl font-black text-slate-950">{table.tableName}</h1><p className="mt-1 text-sm font-semibold text-slate-500">{table.tableCode} · {table.gameType}</p></div></div>
-        <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setShowReconciliation((value) => !value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50">Table Reconciliation</button>{isOpen && canClose && <button type="button" onClick={() => { setActionError(''); setShowClose(true) }} disabled={isSystemLocked} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white disabled:opacity-40">Close Table</button>}<span className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>{table.status}</span></div>
-      </div>
-      <div className="grid gap-4 bg-slate-50 p-5 sm:grid-cols-2 lg:grid-cols-4"><HeaderInfo label="Business Date" value={table.businessDate}/><HeaderInfo label="Opening Float" value={money(table.openingFloat)}/><HeaderInfo label="Opened At" value={table.openedAt ? new Date(table.openedAt).toLocaleString() : 'Unavailable'}/><HeaderInfo label="Staff Assignment" value={staffLabel}/></div>
-    </header>
-
-    {showReconciliation && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><div><h2 className="text-xl font-black text-slate-950">Table Reconciliation</h2><p className="mt-1 text-sm text-slate-500">Backend-derived table float reconciliation.</p></div><button type="button" onClick={() => setShowReconciliation(false)} className="text-sm font-bold text-slate-500">Close</button></div><div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><HeaderInfo label="Opening Float" value={money(reconciliation?.openingFloat)}/><HeaderInfo label="Closing Float" value={money(reconciliation?.closingFloat)}/><HeaderInfo label="Table Difference" value={money(reconciliation?.tableDifference)}/><HeaderInfo label="Reconciliation Status" value={reconciliation?.tableStatus}/></div></section>}
-
-    {!isOpen && <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700">This table is CLOSED. Assignments and result mutations are disabled; historical players and verified results remain available.</div>}
-    {isSystemLocked && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">Casino operations are currently locked. Table mutations are disabled.</div>}
-
-    <PitStaffAssignmentPanel tableId={table.id} tableOpen={isOpen} onStaffChange={setStaff} />
-
-    <VerifiedTablePlayers key={`${table.id}-${table.status}`} tableId={table.id} onSummaryChange={setSummary}/>
-
-    {showClose && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={() => !busy && setShowClose(false)}><section onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-red-600">Final operational action</p><h2 className="mt-1 text-2xl font-black text-slate-950">Close {table.tableName}</h2><p className="mt-1 text-sm text-slate-500">{table.tableCode} · Business Date {table.businessDate}</p></div><button type="button" onClick={() => setShowClose(false)} disabled={busy} className="rounded-lg border px-3 py-2 text-sm font-bold">Cancel</button></div><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><HeaderInfo label="Opening Float" value={money(table.openingFloat)}/><HeaderInfo label="Active Players" value={String(summary.activePlayers)}/><HeaderInfo label="Verified Wins" value={money(summary.WIN)}/><HeaderInfo label="Verified Losses" value={money(summary.LOSS)}/><HeaderInfo label="Current Difference" value={money(reconciliation?.tableDifference)}/><HeaderInfo label="Status" value={reconciliation?.tableStatus}/></div>{summary.activePlayers > 0 && <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">{summary.activePlayers} active customer assignment(s) must leave the table first. Customers are never force-removed.</p>}<label className="mt-5 block"><span className="text-sm font-black text-slate-800">Closing Float (NPR)</span><input type="number" min="0" step="0.01" value={closingFloat} onChange={(event) => setClosingFloat(event.target.value)} disabled={busy} className="mt-2 h-12 w-full rounded-xl border border-slate-200 px-4 text-lg font-black outline-none focus:border-red-400" placeholder="Enter counted closing float"/></label>{actionError && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{actionError}</p>}<button type="button" onClick={closeTable} disabled={busy || isSystemLocked || summary.activePlayers > 0} className="mt-5 h-12 w-full rounded-xl bg-red-600 text-sm font-black text-white disabled:opacity-40">{busy ? 'Closing Table...' : 'Confirm Close Table'}</button></section></div>}
-  </div>
+  }, [tableId]);
+  const mutation = usePitMutation(load);
+  useEffect(() => {
+    load().catch(() => {});
+    return () => {
+      guard.current.invalidate();
+      historyGuard.current.invalidate();
+      resultGuard.current.invalidate();
+    };
+  }, [load]);
+  const close = async () => {
+    if (mutation.blocked || !context || !canManage(user?.role)) return;
+    if (!/^\d{1,17}(\.\d{1,2})?$/.test(closing)) {
+      setError('Enter a nonnegative closing float with at most two decimals.');
+      return;
+    }
+    // Count is only a declared closing float. Backend enforces all close prerequisites.
+    const outcome = await mutation.perform({
+      kind: 'close',
+      idempotent: false,
+      tableId,
+      date: context.table.businessDate,
+      payload: {
+        closingFloat: closing
+      }
+    });
+    if (outcome.success) {
+      setClosing('');
+      setReview(false);
+    }
+  };
+  const loadHistory = async () => {
+    const current = historyGuard.current.next();
+    setHistoryOpen(true);
+    setHistory(null);
+    try {
+      const rows = await api.getPlayerHistory(tableId);
+      if (current()) setHistory(rows);
+    } catch (e) {
+      if (current()) setError(e.message);
+    }
+  };
+  const inspectResults = async player => {
+    const current = resultGuard.current.next();
+    setHistoryPlayer(player);
+    setResultHistory(null);
+    try {
+      const rows = await api.getVerifiedGamingResults(player.customerSessionId);
+      if (current()) setResultHistory(rows.filter(r => r.assignmentId === player.assignmentId));
+    } catch (e) {
+      if (current()) setError(e.message);
+    }
+  };
+  const s = context?.snapshot,
+    t = context?.table,
+    r = context?.reconciliation;
+  const staffCount = s ? [s.activeDealer, s.activeSupervisor].filter(Boolean).length : null;
+  const eligible = t?.status === 'OPEN' && s.players.length === 0 && staffCount === 0 && s.tableCustody.initialized && Number(s.tableCustody.totalValue) === 0 && lifecycleAllows(context.lifecycle, true);
+  return <div className="space-y-4"><button className={button} onClick={() => navigate('/pit/tables')}>Back to Gaming Floor</button><PitMutationStatus mutation={mutation} />{error && <p role="alert">{error}</p>}{loading && <p>Loading table prerequisites…</p>}
+ {context && <><header className="rounded-xl border bg-white p-5"><h1 className="text-2xl font-bold">{t.tableCode} · {t.tableName}</h1><p>Business Date {t.businessDate} · {t.status} · Opened {t.openedAt || 'Unavailable'}</p><p>Opening Float {money(t.openingFloat)}</p><button className={button} disabled={mutation.blocked} onClick={() => load().catch(() => {})}>Refresh operation</button><button className={button} onClick={() => setReview(!review)}>Table Reconciliation</button></header>
+ {review && <section className="rounded border bg-white p-4"><h2 className="font-bold">Table float comparison</h2><p>Opening: {money(r.openingFloat)} · Entered closing float: {money(r.closingFloat)} · Difference: {money(r.tableDifference)} · Operation: {t.status}</p><p>Difference = opening float − entered closing float. This is not movement-adjusted financial profit/loss or a physical denomination reconciliation.</p>{r.tableStatus === 'LEGACY_RESOLVED' && <p>Legacy reconciliation resolution recorded.</p>}</section>}
+ <PitStaffAssignmentPanel key={`${tableId}-${revision}`} tableId={tableId} tableOpen={t.status === 'OPEN'} date={t.businessDate} lifecycle={context.lifecycle} />
+ {canManage(user?.role) && <section className="rounded border bg-white p-4"><h2 className="text-xl font-bold">Close Table prerequisites</h2><p>Active players: {s.players.length} · Active staff: {staffCount} · Physical table custody: {s.tableCustody.initialized ? money(s.tableCustody.totalValue) : 'Unavailable'}</p><ol className="list-decimal pl-5"><li>Resolve and leave player assignments.</li><li>Return physical table chips to CAGE through Chip Control.</li><li>Explicitly end Dealer and Pit Supervisor assignments.</li><li>Refresh these prerequisites, review the entered closing float, then close.</li></ol><p>Closing does not perform these steps automatically. The backend rechecks every prerequisite.</p>{!lifecycleAllows(context.lifecycle, true) && <p>Current date / lifecycle unavailable for close.</p>}<label>Entered closing float (NPR)<input className="m-2 border p-2" inputMode="decimal" value={closing} onChange={e => setClosing(e.target.value)} disabled={mutation.blocked} /></label><button className={button} disabled={!eligible || mutation.blocked || !closing} onClick={close}>Confirm Close Table</button></section>}
+ <DealerTableMode embedded refreshTick={revision} />
+ <section><button className={button} onClick={loadHistory}>Load player assignment history</button>{historyOpen && (history === null ? <p>History loading / unavailable.</p> : history.map(p => <p key={p.assignmentId}>{p.customerName} · {p.sessionCode} · {p.businessDate} · {p.status} · {p.joinedAt} → {p.leftAt || 'Active'} <button className={button} onClick={() => inspectResults(p)}>View recorded results</button></p>))}{historyPlayer && <div><strong>Recorded results · {historyPlayer.customerName}</strong>{resultHistory === null ? <p>Results loading / unavailable.</p> : resultHistory.length === 0 ? <p>No recorded results for this assignment.</p> : resultHistory.map(r => <p key={r.id}>{r.businessDate} · {r.resultType} · {money(r.amount)} · {r.createdAt}</p>)}</div>}</section>
+ </>}
+ </div>;
 }
-
-const HeaderInfo = ({ label, value }) => <div><p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p><p className="mt-1 text-sm font-black text-slate-900">{value || 'Unavailable'}</p></div>
-
-export default TableSessionDetails
+export default function TableSessionDetails() {
+  const {
+    tableId
+  } = useParams();
+  return <Operation key={tableId} />;
+}

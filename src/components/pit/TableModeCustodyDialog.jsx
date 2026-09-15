@@ -1,3 +1,4 @@
+import { money } from '../../utils/pit'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import chipCustodyApi from '../../api/chipCustodyApi'
 import { getErrorMessage } from '../../utils/errorUtils'
@@ -9,7 +10,7 @@ export const TABLE_CUSTODY_ACTIONS = Object.freeze({
   RETURN: 'RETURN',
 })
 
-const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
+
 const newIdempotencyKey = () => globalThis.crypto?.randomUUID?.() || null
 
 const normalizedDenominations = (denominations, quantities) => Object.fromEntries(
@@ -48,6 +49,7 @@ const TableModeCustodyDialog = ({
         ? await chipCustodyApi.getCustomerSessionInventory(player.customerSessionId)
         : await chipCustodyApi.getTableInventory(tableId)
       if (sequence !== sequenceRef.current) return null
+      if (!confirmed || typeof confirmed.initialized !== 'boolean' || !confirmed.denominations || confirmed.totalValue == null) throw new Error('Authoritative custody unavailable.')
       setInventory(confirmed)
       return confirmed
     } catch (error) {

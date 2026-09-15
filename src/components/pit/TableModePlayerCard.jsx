@@ -1,6 +1,7 @@
-const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
+import { money } from '../../utils/pit'
 
-const TableModePlayerCard = ({ player, operational, mutationPending, onCustody, onResult, onLeave }) => (
+
+const TableModePlayerCard = ({ player, operational, newActivityAllowed = operational, mutationPending, onCustody, onResult, onLeave }) => (
   <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="flex items-start justify-between gap-3">
       <div>
@@ -20,20 +21,20 @@ const TableModePlayerCard = ({ player, operational, mutationPending, onCustody, 
         : 'Unavailable'} />
       <Datum label="Customer Custody"
         value={player.custodyInitialized ? money(player.custodyTotal) : 'Not initialized'} />
-      <Datum label="Net Gaming Position" value={money(player.netPosition)} />
+      <Datum label="Assignment Net (Loss − Win)" value={money(player.netPosition)} />
       <Datum label="Verified WIN" value={money(player.verifiedWinTotal)} tone="green" />
       <Datum label="Verified LOSS" value={money(player.verifiedLossTotal)} tone="red" />
     </div>
 
     <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
       <button type="button" onClick={() => onCustody('CHIP_IN', player)}
-        disabled={!operational || mutationPending}
+        disabled={!newActivityAllowed || mutationPending}
         className="min-h-11 rounded-xl border border-amber-300 bg-amber-50 px-2 text-[10px] font-black text-amber-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-75">
         CHIP-IN
       </button>
       {['WIN', 'LOSS'].map((action) => (
         <button key={action} type="button" onClick={() => onResult(action, player)}
-          disabled={!operational || mutationPending}
+          disabled={!newActivityAllowed || mutationPending}
           className={`min-h-11 rounded-xl border px-2 text-[10px] font-black disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-75 ${action === 'WIN'
             ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
             : 'border-red-300 bg-red-50 text-red-700'}`}>

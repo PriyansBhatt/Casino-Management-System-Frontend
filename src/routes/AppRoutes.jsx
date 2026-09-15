@@ -60,8 +60,6 @@ import LosingReturnPreview from '../pages/reports/LosingReturnPreview'
 import TableList from '../pages/pit/TableList'
 import TableSessionDetails from '../pages/pit/TableSessionDetails'
 import DealerTableMode from '../pages/pit/DealerTableMode'
-import CloseTableSession from '../pages/pit/CloseTableSession'
-import TableReports from '../pages/pit/TableReports'
 import SlotMachineGaming from '../pages/pit/SlotMachineGaming'
 
 // ============================================================
@@ -434,12 +432,16 @@ const AppRoutes = () => {
 
       <Route
         path="/pit/tables/:tableId/close"
-        element={protectedPage(<CloseTableSession />)}
+        element={protectedPage(<TableSessionDetails />)}
       />
+
+      <Route path="/pit/open-sessions" element={<Navigate to="/pit/tables" replace />} />
+      <Route path="/pit/close-sessions" element={<Navigate to="/pit/tables" replace />} />
+      <Route path="/pit/sessions/:id" element={<Navigate to="/pit/tables" replace />} />
 
       <Route
         path="/pit/table-reports"
-        element={protectedPage(<TableReports />)}
+        element={<Navigate to="/pit/tables" replace />}
       />
 
       {/* =====================================================

@@ -1,3 +1,4 @@
+import { isPitRoute } from '../../utils/pit'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
 import Sidebar from './Sidebar'
@@ -9,6 +10,7 @@ const MainLayout = ({ children }) => {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isManagementDashboard = pathname === '/dashboard'
+  const isPit = isPitRoute(pathname)
   const isReconciliation = pathname === '/cashier/reconciliation'
   const isCashOut = pathname === '/cashier/cash-out'
   const isChipControl = isChipControlRoute(pathname)
@@ -39,7 +41,7 @@ const MainLayout = ({ children }) => {
         <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 border-b border-slate-200 bg-white px-6">
           {isManagementDashboard || isBuyIn ? (
             <p className="text-sm font-bold text-slate-600">{isBuyIn ? 'Cash Collection & Buy-In' : 'Management overview'}</p>
-          ) : isChipControl ? <p className="text-sm font-bold text-slate-600">Chip Control</p> : isCashOut ? <p className="text-sm font-bold text-slate-600">Cash-Out &amp; Losing Return</p> : isReconciliation ? <p className="text-sm font-bold text-slate-600">Cashier Reconciliation</p> : <>
+          ) : isChipControl ? <p className="text-sm font-bold text-slate-600">Chip Control</p> : isCashOut ? <p className="text-sm font-bold text-slate-600">Cash-Out &amp; Losing Return</p> : isPit ? <p className="text-sm font-bold text-slate-600">Gaming Floor / Pit</p> : isReconciliation ? <p className="text-sm font-bold text-slate-600">Cashier Reconciliation</p> : <>
           <button
             type="button"
             className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500"
@@ -62,7 +64,7 @@ const MainLayout = ({ children }) => {
           </>}
 
           <div className="ml-auto flex items-center gap-3">
-            {!isReconciliation && !isCashOut && !isChipControl && !isManagementDashboard && !isBuyIn && !isReception && !isCustomerDirectory && <button
+            {!isPit && !isReconciliation && !isCashOut && !isChipControl && !isManagementDashboard && !isBuyIn && !isReception && !isCustomerDirectory && <button
               type="button"
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
             >

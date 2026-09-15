@@ -1,10 +1,11 @@
+import { money } from '../../utils/pit'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from './AddPlayerDialog'
 import DenominationQuantityInput from './DenominationQuantityInput'
 
 export const TABLE_RESULT_ACTIONS = Object.freeze({ WIN: 'WIN', LOSS: 'LOSS' })
 
-const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
+
 
 const normalizedDenominations = (denominations, quantities) => Object.fromEntries(
   denominations

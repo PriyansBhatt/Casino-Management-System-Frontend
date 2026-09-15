@@ -1,4 +1,5 @@
-const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
+import { useState } from 'react'
+import { money, quantity as parseQuantity } from '../../utils/pit'
 
 const DenominationQuantityInput = ({
   denominations,
@@ -9,12 +10,13 @@ const DenominationQuantityInput = ({
   onChange,
   disabled,
 }) => {
+  const [error,setError]=useState('')
   const setQuantity = (denomination, rawValue) => {
-    const parsed = Number(rawValue)
-    const whole = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0
-    const maximum = availability?.[denomination]
-    const next = maximum == null ? whole : Math.min(whole, Number(maximum))
-    onChange({ ...quantities, [denomination]: next })
+    try {
+      const next=parseQuantity(rawValue), maximum=availability?.[denomination]
+      if(maximum != null && next>Number(maximum)) throw new Error('Quantity exceeds the latest available physical custody.')
+      setError('');onChange({...quantities,[denomination]:next})
+    } catch(e) {setError(e.message)}
   }
 
   const total = denominations.reduce(
@@ -23,6 +25,7 @@ const DenominationQuantityInput = ({
 
   return (
     <div className="space-y-3">
+      {error && <p role="alert" className="text-red-700">{error}</p>}
       {denominations.map((denomination) => {
         const quantity = Number(quantities[denomination] || 0)
         const maximum = availability?.[denomination]

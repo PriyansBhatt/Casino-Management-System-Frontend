@@ -41,6 +41,8 @@ const AddPlayerDialog = ({
   }, [onAuthorizationError, operationId])
 
   useEffect(() => {
+    sequenceRef.current += 1
+    setResults([])
     const normalized = query.trim()
     setSelected(null)
     setSubmitError('')

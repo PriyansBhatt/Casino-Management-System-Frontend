@@ -1,6 +1,6 @@
 import TableModePlayerCard from './TableModePlayerCard'
 
-const TableModePlayerGrid = ({ players, operational, mutationPending, onCustody, onResult, onLeave }) => {
+const TableModePlayerGrid = ({ players, operational, newActivityAllowed, mutationPending, onCustody, onResult, onLeave }) => {
   if (!players?.length) {
     return (
       <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
@@ -16,7 +16,7 @@ const TableModePlayerGrid = ({ players, operational, mutationPending, onCustody,
     <section className={`grid gap-4 ${players.length === 1
       ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3'}`}>
       {players.map((player) => (
-        <TableModePlayerCard key={player.assignmentId} player={player} operational={operational}
+        <TableModePlayerCard key={player.assignmentId} player={player} operational={operational} newActivityAllowed={newActivityAllowed}
           mutationPending={mutationPending} onCustody={onCustody} onResult={onResult}
           onLeave={onLeave} />
       ))}

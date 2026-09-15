@@ -12,15 +12,20 @@ import { ROLES } from '../../constants/roles'
 import useAuth from '../../hooks/useAuth'
 import useToast from '../../hooks/useToast'
 import { getErrorMessage } from '../../utils/errorUtils'
+import usePitMutation from '../../hooks/usePitMutation'
+import PitMutationStatus from '../../components/pit/PitMutationStatus'
+import { money, lifecycleAllows } from '../../utils/pit'
+import { statusPayload } from '../../utils/chipControl'
 
 const POLL_INTERVAL_MS = 12_000
 const STALE_MUTATION_THRESHOLD_MS = 36_000
 
-const DealerTableMode = () => {
+const DealerTableModeInner = ({ embedded = false, refreshTick = 0, onSnapshot }) => {
   const { tableId } = useParams()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const { showToast } = useToast()
+  const [lifecycle, setLifecycle] = useState(null)
   const [snapshot, setSnapshot] = useState(null)
   const [initialError, setInitialError] = useState('')
   const [staleError, setStaleError] = useState('')
@@ -56,8 +61,11 @@ const DealerTableMode = () => {
     if (mountedRef.current) setRefreshing(true)
 
     try {
-      const confirmed = await pitApi.getPitTableMode(tableId)
+      const [confirmed, rawStatus] = await Promise.all([pitApi.getPitTableMode(tableId), pitApi.getOperationalStatus().catch(() => null)])
+      let operationalStatus = null
+      try { operationalStatus = statusPayload(rawStatus, confirmed.businessDate) } catch { /* Historical view remains readable; mutations fail closed. */ }
       if (!mountedRef.current || sequence !== requestSequenceRef.current) return null
+      setLifecycle(operationalStatus)
       snapshotRef.current = confirmed
       setSnapshot(confirmed)
       setInitialError('')
@@ -81,6 +89,7 @@ const DealerTableMode = () => {
         }
       }
 
+      setLifecycle(null)
       const message = getErrorMessage(error)
       if (snapshotRef.current) setStaleError(message)
       else setInitialError(message)
@@ -95,6 +104,13 @@ const DealerTableMode = () => {
       }
     }
   }, [assignmentLost, showToast, tableId, user?.role, verifyDealerAssignment])
+
+  const mutation = usePitMutation(async () => {
+    const next = await refreshSnapshot({ force: true })
+    if (!next) throw new Error('Latest table state unavailable.')
+  })
+  useEffect(() => { onSnapshot?.(snapshot) }, [snapshot, onSnapshot])
+  useEffect(() => { if (refreshTick) refreshSnapshot({ force: true }) }, [refreshTick, refreshSnapshot])
 
   useEffect(() => {
     mountedRef.current = true
@@ -155,180 +171,34 @@ const DealerTableMode = () => {
     return lost
   }, [user?.role, verifyDealerAssignment])
 
-  const beginMutation = () => {
-    mutationPendingRef.current = true
-    setMutationPending(true)
+  const run = async (target) => {
+    if (mutation.blocked) return {success:false,message:'Resolve the pending Pit operation first.'}
+    mutationPendingRef.current = true; setMutationPending(true)
+    requestSequenceRef.current += 1; inFlightRef.current = false
+    try { return await mutation.perform({...target,tableCode:snapshotRef.current.tableCode,date:snapshotRef.current.businessDate}) }
+    finally { mutationPendingRef.current=false; if(mountedRef.current)setMutationPending(false) }
   }
-
-  const endMutation = () => {
-    mutationPendingRef.current = false
-    if (mountedRef.current) setMutationPending(false)
+  const handleAssignPlayer = async candidate => {
+    const outcome=await run({kind:'assign',idempotent:false,tableId,payload:{customerId:candidate.customerId,customerSessionId:candidate.customerSessionId}})
+    if(outcome.success)setAddPlayerOpen(false)
+    return outcome
   }
-
-  const handleAssignPlayer = async (candidate) => {
-    if (mutationPendingRef.current) return { success: false, message: 'Another table operation is already in progress.' }
-    beginMutation()
-    try {
-      await pitApi.assignPlayer(tableId, {
-        customerId: candidate.customerId,
-        customerSessionId: candidate.customerSessionId,
-      })
-      const confirmed = await refreshSnapshot({ force: true })
-      const assigned = confirmed?.players?.some(
-        (player) => player.customerSessionId === candidate.customerSessionId,
-      )
-      if (!assigned) {
-        return { success: false, uncertain: true, message: 'The request completed, but the authoritative table assignment could not be confirmed. Refresh before retrying.' }
-      }
-      setAddPlayerOpen(false)
-      showToast({ type: 'success', title: 'Player assigned', message: `${candidate.customerName} is now assigned to ${confirmed.tableCode}.` })
-      return { success: true }
-    } catch (error) {
-      if (await recoverDealerAuthorization(error)) return { success: false, lost: true }
-
-      const confirmed = await refreshSnapshot({ force: true })
-      const assigned = confirmed?.players?.some(
-        (player) => player.customerSessionId === candidate.customerSessionId,
-      )
-      if (assigned) {
-        setAddPlayerOpen(false)
-        showToast({ type: 'success', title: 'Player assignment confirmed', message: `${candidate.customerName} is assigned to ${confirmed.tableCode}.` })
-        return { success: true }
-      }
-      return {
-        success: false,
-        uncertain: !error?.response && !confirmed,
-        message: getErrorMessage(error),
-      }
-    } finally {
-      endMutation()
-    }
+  const handleLeavePlayer = async (player,payload) => {
+    const outcome=await run({kind:'leave',idempotent:true,tableId,assignmentId:player.assignmentId,sessionId:player.customerSessionId,payload})
+    if(outcome.success)setLeavePlayer(null)
+    return outcome
   }
-
-  const handleLeavePlayer = async (player, payload) => {
-    if (mutationPendingRef.current) return { success: false, message: 'Another table operation is already in progress.' }
-    beginMutation()
-    try {
-      await pitApi.leavePlayer(tableId, player.assignmentId, payload)
-      const confirmed = await refreshSnapshot({ force: true })
-      const stillAssigned = confirmed?.players?.some(
-        (current) => current.assignmentId === player.assignmentId,
-      )
-      if (!confirmed || stillAssigned) {
-        return { success: false, message: 'The request completed, but the authoritative table leave could not be confirmed. Retry with the same request only after refreshing.' }
-      }
-      setLeavePlayer(null)
-      showToast({ type: 'success', title: 'Player left table', message: `${player.customerName} is no longer assigned to ${confirmed.tableCode}. The casino session remains open.` })
-      return { success: true }
-    } catch (error) {
-      if (await recoverDealerAuthorization(error)) return { success: false, lost: true }
-
-      const confirmed = await refreshSnapshot({ force: true })
-      const stillAssigned = confirmed?.players?.some(
-        (current) => current.assignmentId === player.assignmentId,
-      )
-      if (confirmed && !stillAssigned) {
-        setLeavePlayer(null)
-        showToast({ type: 'success', title: 'Table leave confirmed', message: `${player.customerName} is no longer assigned to ${confirmed.tableCode}.` })
-        return { success: true }
-      }
-      return { success: false, message: getErrorMessage(error) }
-    } finally {
-      endMutation()
-    }
+  const handleCustodyAction = (mode,player) => {setAddPlayerOpen(false);setLeavePlayer(null);setResultAction(null);setCustodyAction({mode,player})}
+  const handleResultAction = (resultType,player) => {setAddPlayerOpen(false);setLeavePlayer(null);setCustodyAction(null);setResultAction({resultType,player})}
+  const handleCustodyTransfer = async (player,mode,payload) => {
+    const outcome=await run({kind:mode===TABLE_CUSTODY_ACTIONS.CHIP_IN?'chip-in':'chip-return',idempotent:true,tableId,sessionId:player.customerSessionId,assignmentId:player.assignmentId,payload})
+    if(outcome.success)setCustodyAction(null)
+    return outcome
   }
-
-  const handleCustodyAction = (mode, player) => {
-    setAddPlayerOpen(false)
-    setLeavePlayer(null)
-    setResultAction(null)
-    setCustodyAction({ mode, player })
-  }
-
-  const handleCustodyTransfer = async (player, mode, payload) => {
-    if (mutationPendingRef.current) return { success: false, message: 'Another table operation is already in progress.' }
-    beginMutation()
-    try {
-      if (mode === TABLE_CUSTODY_ACTIONS.CHIP_IN) {
-        await chipCustodyApi.moveCustomerChipsToTable(tableId, player.customerSessionId, payload)
-      } else {
-        await chipCustodyApi.returnTableChipsToCustomer(tableId, player.customerSessionId, payload)
-      }
-      const confirmed = await refreshSnapshot({ force: true })
-      if (!confirmed) {
-        return { success: false, message: 'The transfer response was received, but the authoritative table snapshot could not be refreshed. Retry with the same request only after revalidation.' }
-      }
-      setCustodyAction(null)
-      showToast({
-        type: 'success',
-        title: mode === TABLE_CUSTODY_ACTIONS.CHIP_IN ? 'CHIP-IN confirmed' : 'RETURN confirmed',
-        message: mode === TABLE_CUSTODY_ACTIONS.CHIP_IN
-          ? `Physical chips moved from ${player.sessionCode} to ${confirmed.tableCode}.`
-          : `Physical chips returned from ${confirmed.tableCode} to ${player.sessionCode}.`,
-      })
-      return { success: true }
-    } catch (error) {
-      if (await recoverDealerAuthorization(error)) return { success: false, lost: true }
-      await refreshSnapshot({ force: true })
-      return { success: false, message: getErrorMessage(error) }
-    } finally {
-      endMutation()
-    }
-  }
-
-  const handleResultAction = (resultType, player) => {
-    setAddPlayerOpen(false)
-    setLeavePlayer(null)
-    setCustodyAction(null)
-    setResultAction({ resultType, player })
-  }
-
-  const handleVerifiedResult = async (player, resultType, request) => {
-    if (mutationPendingRef.current) return { success: false, message: 'Another table operation is already in progress.' }
-    beginMutation()
-    try {
-      await pitApi.createVerifiedGamingResult({
-        customerId: player.customerId,
-        customerSessionId: player.customerSessionId,
-        pitTableId: tableId,
-        assignmentId: player.assignmentId,
-        sourceType: 'TABLE',
-        resultType,
-        denominations: request.denominations,
-        idempotencyKey: request.idempotencyKey,
-      })
-      const confirmed = await refreshSnapshot({ force: true })
-      if (!confirmed) {
-        return { success: false, message: `The verified ${resultType} response was received, but the authoritative table snapshot could not be refreshed. Retry with the same request only after revalidation.` }
-      }
-      setResultAction(null)
-      showToast({
-        type: 'success',
-        title: `Verified ${resultType} recorded`,
-        message: `The authoritative result for ${player.customerName} is reflected in the refreshed table snapshot.`,
-      })
-      return { success: true }
-    } catch (error) {
-      if (await recoverDealerAuthorization(error)) return { success: false, lost: true }
-      const confirmed = await refreshSnapshot({ force: true })
-      const playerStillActive = confirmed?.players?.some(
-        (current) => current.assignmentId === player.assignmentId && current.status === 'ACTIVE',
-      )
-      const message = getErrorMessage(error)
-      if (confirmed && !playerStillActive) {
-        setResultAction(null)
-        showToast({ type: 'error', title: 'Player assignment ended', message })
-        return { success: false, message }
-      }
-      return {
-        success: false,
-        message: !error?.response
-          ? `${message} Authoritative state was refreshed; retrying will reuse the same idempotency key.`
-          : message,
-      }
-    } finally {
-      endMutation()
-    }
+  const handleVerifiedResult = async (player,resultType,payload) => {
+    const outcome=await run({kind:'result',idempotent:true,tableId,sessionId:player.customerSessionId,assignmentId:player.assignmentId,payload:{...payload,customerId:player.customerId,customerSessionId:player.customerSessionId,pitTableId:tableId,assignmentId:player.assignmentId,sourceType:'TABLE',resultType}})
+    if(outcome.success)setResultAction(null)
+    return outcome
   }
 
   if (assignmentLost) {
@@ -366,8 +236,9 @@ const DealerTableMode = () => {
   const businessDateMismatch = !snapshot.currentBusinessDateOpen
     || snapshot.businessDate !== snapshot.currentBusinessDate
   const tableOperational = snapshotValid && !snapshot.systemLocked && !tableClosed
-    && !businessDateMismatch && !assignmentLost && !freshnessExpired
-  const canMutateTable = tableOperational && !refreshing && !mutationPending
+    && !businessDateMismatch && !assignmentLost && !freshnessExpired && !staleError && lifecycleAllows(lifecycle, true)
+  const canMutateTable = tableOperational && !refreshing && !mutationPending && !mutation.blocked
+  const canStart = canMutateTable && lifecycleAllows(lifecycle, false)
   const tableAvailability = Object.fromEntries(snapshot.supportedDenominations.map(
     (denomination) => [denomination, Number(snapshot.tableCustody?.denominations?.[denomination] || 0)],
   ))
@@ -382,10 +253,10 @@ const DealerTableMode = () => {
     : null
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
-      <TableModeHeader snapshot={snapshot} lastRefreshedAt={lastRefreshedAt}
+      {!embedded && <TableModeHeader snapshot={snapshot} lastRefreshedAt={lastRefreshedAt}
         refreshing={refreshing} stale={Boolean(staleError)}
         onRefresh={() => refreshSnapshot({ interactive: true })}
-        onExit={() => navigate('/pit/tables')} />
+        onExit={() => navigate('/pit/tables')} />}
 
       <div className="mx-auto max-w-[1500px] space-y-4 px-4 py-4 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -402,6 +273,9 @@ const DealerTableMode = () => {
           </button>
         </div>
 
+        <PitMutationStatus mutation={mutation} />
+        <section className="rounded border bg-white p-4"><strong>Operation Verified Results (includes players who LEFT)</strong><p>Verified Wins: {money(snapshot.operationVerifiedWins)} · Verified Losses: {money(snapshot.operationVerifiedLosses)} · Floor Net: {money(Number(snapshot.operationVerifiedLosses)-Number(snapshot.operationVerifiedWins))}</p><p>These are financial results; physical custody is separate.</p></section>
+        {!lifecycleAllows(lifecycle,false) && <Warning title="New activity unavailable" detail="The current lifecycle does not allow adding players, chip-in or WIN/LOSS. Eligible settlement actions remain separate." />}
         {snapshot.systemLocked && (
           <Warning title="SYSTEM LOCKED" detail="Operational changes are temporarily disabled." danger />
         )}
@@ -431,14 +305,14 @@ const DealerTableMode = () => {
               setResultAction(null)
               setAddPlayerOpen(true)
             }}
-              disabled={!canMutateTable}
+              disabled={!canStart}
               className="min-h-12 rounded-xl bg-amber-400 px-6 text-sm font-black text-slate-950 shadow-sm disabled:cursor-not-allowed disabled:opacity-40">
               {mutationPending ? 'Operation pending…' : 'Add Player'}
             </button>
           </div>
         )}
 
-        <TableModePlayerGrid players={snapshot.players} operational={canMutateTable}
+        <TableModePlayerGrid players={snapshot.players} operational={canMutateTable} newActivityAllowed={canStart}
           mutationPending={mutationPending} onCustody={handleCustodyAction}
           onResult={handleResultAction}
           onLeave={(player) => {
@@ -462,7 +336,7 @@ const DealerTableMode = () => {
 
       {addPlayerOpen && (
         <AddPlayerDialog operationId={tableId} tableCode={snapshot.tableCode}
-          operational={canMutateTable} pending={mutationPending}
+          operational={canStart} pending={mutation.blocked}
           onAssign={handleAssignPlayer} onAuthorizationError={recoverDealerAuthorization}
           onClose={() => setAddPlayerOpen(false)} />
       )}
@@ -471,7 +345,7 @@ const DealerTableMode = () => {
           player={currentLeavePlayer || { ...leavePlayer, status: 'INACTIVE' }}
           tableCode={snapshot.tableCode}
           denominations={snapshot.supportedDenominations || []} availability={tableAvailability}
-          operational={canMutateTable && Boolean(currentLeavePlayer)} pending={mutationPending}
+          operational={canMutateTable && Boolean(currentLeavePlayer)} pending={mutation.blocked}
           onLeave={handleLeavePlayer} onClose={() => setLeavePlayer(null)} />
       )}
       {custodyAction && (
@@ -481,7 +355,7 @@ const DealerTableMode = () => {
           player={currentCustodyPlayer || { ...custodyAction.player, status: 'INACTIVE' }}
           tableId={tableId}
           tableCode={snapshot.tableCode} denominations={snapshot.supportedDenominations || []}
-          operational={canMutateTable && Boolean(currentCustodyPlayer)} pending={mutationPending}
+          operational={(custodyAction.mode === TABLE_CUSTODY_ACTIONS.CHIP_IN ? canStart : canMutateTable) && Boolean(currentCustodyPlayer)} pending={mutation.blocked}
           onSubmit={handleCustodyTransfer} onAuthorizationError={recoverDealerAuthorization}
           onClose={() => setCustodyAction(null)} />
       )}
@@ -492,7 +366,7 @@ const DealerTableMode = () => {
           player={currentResultPlayer || { ...resultAction.player, status: 'INACTIVE' }}
           tableCode={snapshot.tableCode} tableName={snapshot.tableName}
           denominations={snapshot.supportedDenominations || []}
-          operational={canMutateTable && Boolean(currentResultPlayer)} pending={mutationPending}
+          operational={canStart && Boolean(currentResultPlayer)} pending={mutation.blocked}
           onSubmit={handleVerifiedResult} onClose={() => setResultAction(null)} />
       )}
     </div>
@@ -525,4 +399,7 @@ const Warning = ({ title, detail, danger }) => (
   </section>
 )
 
-export default DealerTableMode
+export default function DealerTableMode(props) {
+  const {tableId}=useParams()
+  return <DealerTableModeInner key={tableId} {...props}/>
+}

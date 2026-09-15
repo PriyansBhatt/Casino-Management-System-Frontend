@@ -1,8 +1,9 @@
+import { money, zeroLeaveAllowed } from '../../utils/pit'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import DenominationQuantityInput from './DenominationQuantityInput'
 import { Dialog } from './AddPlayerDialog'
 
-const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
+
 
 const normalizedDenominations = (denominations, quantities) => Object.fromEntries(
   denominations
@@ -39,7 +40,7 @@ const LeavePlayerDialog = ({
     ([denomination, quantity]) => quantity > Number(availability?.[denomination] || 0),
   )
   const canSubmit = operational && activePlayer && secureRequestAvailable && !pending
-    && !exceedsAvailability && (total > 0 || zeroConfirmed)
+    && !exceedsAvailability && zeroLeaveAllowed(total, zeroConfirmed)
 
   useEffect(() => {
     requestRef.current = null

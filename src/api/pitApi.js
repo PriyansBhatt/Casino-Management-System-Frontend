@@ -1,4 +1,9 @@
 import axiosInstance from './axiosInstance'
+import chipCustodyApi from './chipCustodyApi'
+import { assertSnapshot } from '../utils/pit'
+const envelope = response => { if(response.data?.success !== true || !Object.hasOwn(response.data,'data')) throw new Error('Authoritative Pit response unavailable.'); return required(response.data.data) }
+const required = value => { if (value == null) throw new Error('Authoritative Pit response unavailable.'); return value }
+const list = value => { if (!Array.isArray(value)) throw new Error('Authoritative Pit list unavailable.'); return value }
 import PIT_MOCK_TABLES from '../constants/pitMockData'
 import { TABLE_SESSION_STATUSES, TABLE_STATUSES } from '../constants/pitConstants'
 import { calculateTableNet, generateTableSessionReference } from '../utils/pitUtils'
@@ -36,23 +41,25 @@ const saveTables = () => saveStorage(tablesStorageKey, mockTables)
 const saveSessions = () => saveStorage(sessionsStorageKey, mockSessions)
 
 export const pitApi = {
+  getCurrentOpenBusinessDate: chipCustodyApi.getCurrentOpenBusinessDate,
+  getOperationalStatus: chipCustodyApi.getOperationalStatus,
   getAuthoritativeTables: async () => {
     const response = await axiosInstance.get('/pit-tables', { skipUnauthorizedRedirect: true })
-    return Array.isArray(response.data) ? response.data : []
+    return list(response.data)
   },
 
   getAuthoritativeTable: async (tableId) => {
     const response = await axiosInstance.get(`/pit-tables/${tableId}`, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data
+    return required(response.data)
   },
 
   getPitTableMode: async (operationId) => {
     const response = await axiosInstance.get(`/pit-tables/${operationId}/mode`, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data
+    return assertSnapshot(envelope(response), operationId)
   },
 
   getEligiblePitTablePlayers: async (operationId, query) => {
@@ -60,35 +67,35 @@ export const pitApi = {
       `/pit-tables/${operationId}/eligible-players`,
       { params: { query }, skipUnauthorizedRedirect: true },
     )
-    return response.data?.data || []
+    return list(envelope(response))
   },
 
   openAuthoritativeTable: async (physicalTableId, payload) => {
     const response = await axiosInstance.post(`/pit-tables/physical/${physicalTableId}/open`, payload, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data
+    return required(response.data)
   },
 
   getAssignedPlayers: async (tableId) => {
     const response = await axiosInstance.get(`/pit/tables/${tableId}/players`, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data || []
+    return list(envelope(response))
   },
 
   getPlayerHistory: async (tableId) => {
     const response = await axiosInstance.get(`/pit/tables/${tableId}/players/history`, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data || []
+    return list(envelope(response))
   },
 
   getTableReconciliation: async (tableId) => {
     const response = await axiosInstance.get(`/pit-tables/${tableId}/reconciliation`, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data
+    return required(response.data)
   },
 
   getPitStaffCandidates: async (role) => {
@@ -96,28 +103,28 @@ export const pitApi = {
       params: { role },
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data || []
+    return list(envelope(response))
   },
 
   getActiveTableStaff: async (tableId) => {
     const response = await axiosInstance.get(`/pit-tables/${tableId}/staff`, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data || []
+    return list(envelope(response))
   },
 
   getTableStaffHistory: async (tableId) => {
     const response = await axiosInstance.get(`/pit-tables/${tableId}/staff/history`, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data || []
+    return list(envelope(response))
   },
 
   assignTableStaff: async (tableId, payload) => {
     const response = await axiosInstance.post(`/pit-tables/${tableId}/staff`, payload, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data
+    return envelope(response)
   },
 
   endTableStaffAssignment: async (tableId, assignmentId, payload) => {
@@ -125,7 +132,7 @@ export const pitApi = {
       `/pit-tables/${tableId}/staff/${assignmentId}/end`, payload,
       { skipUnauthorizedRedirect: true },
     )
-    return response.data?.data
+    return envelope(response)
   },
 
   handoverTableStaff: async (tableId, assignmentRole, payload) => {
@@ -133,7 +140,7 @@ export const pitApi = {
       `/pit-tables/${tableId}/staff/${assignmentRole}/handover`, payload,
       { skipUnauthorizedRedirect: true },
     )
-    return response.data?.data
+    return envelope(response)
   },
 
   closeAuthoritativeTable: async (tableId, closingFloat) => {
@@ -141,14 +148,14 @@ export const pitApi = {
       params: { closingFloat },
       skipUnauthorizedRedirect: true,
     })
-    return response.data
+    return required(response.data)
   },
 
   assignPlayer: async (tableId, payload) => {
     const response = await axiosInstance.post(`/pit/tables/${tableId}/players`, payload, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data
+    return envelope(response)
   },
 
   leavePlayer: async (tableId, assignmentId, payload) => {
@@ -156,14 +163,14 @@ export const pitApi = {
       `/pit/tables/${tableId}/players/${assignmentId}/leave`, payload,
       { skipUnauthorizedRedirect: true },
     )
-    return response.data?.data
+    return envelope(response)
   },
 
   createVerifiedGamingResult: async (payload) => {
     const response = await axiosInstance.post('/verified-gaming-results', payload, {
       skipUnauthorizedRedirect: true,
     })
-    return response.data?.data
+    return envelope(response)
   },
 
   getVerifiedGamingResults: async (customerSessionId) => {
@@ -171,7 +178,32 @@ export const pitApi = {
       `/verified-gaming-results/session/${customerSessionId}`,
       { skipUnauthorizedRedirect: true },
     )
-    return response.data?.data || []
+    return list(envelope(response))
+  },
+
+  executePitMutation: async (op) => {
+    const p=op.payload
+    let value
+    switch(op.kind) {
+      case 'open': value=await pitApi.openAuthoritativeTable(op.physicalTableId,p); break
+      case 'assign': value=await pitApi.assignPlayer(op.tableId,p); break
+      case 'leave': value=await pitApi.leavePlayer(op.tableId,op.assignmentId,p); break
+      case 'result': value=await pitApi.createVerifiedGamingResult(p); break
+      case 'chip-in': value=await chipCustodyApi.moveCustomerChipsToTable(op.tableId,op.sessionId,p); break
+      case 'chip-return': value=await chipCustodyApi.returnTableChipsToCustomer(op.tableId,op.sessionId,p); break
+      case 'staff-assign': value=await pitApi.assignTableStaff(op.tableId,p); break
+      case 'staff-end': value=await pitApi.endTableStaffAssignment(op.tableId,op.assignmentId,p); break
+      case 'staff-handover': value=await pitApi.handoverTableStaff(op.tableId,op.role,p); break
+      case 'close': value=await pitApi.closeAuthoritativeTable(op.tableId,p.closingFloat); break
+      default: throw new Error('Unknown Pit operation.')
+    }
+    if (!value || !(value.id || value.assignmentId)) throw new Error('Mutation response unconfirmed. Retain original operation reference.')
+    if ((op.kind==='close' && (value.id!==op.tableId || value.status!=='CLOSED'))
+      || (op.kind==='open' && op.tableCode && value.tableCode!==op.tableCode)
+      || (['assign','leave','result','chip-in','chip-return','staff-assign','staff-end','staff-handover'].includes(op.kind) && value.pitTableId!==op.tableId)
+      || (['leave','result','chip-in','chip-return'].includes(op.kind) && value.customerSessionId!==op.sessionId)) throw new Error('Mutation target could not be confirmed.')
+    if (value.businessDate !== op.date) throw new Error('Mutation Business Date could not be confirmed.')
+    return value
   },
   getTables: async (filters = {}) => {
     if (isMockPitEnabled()) {

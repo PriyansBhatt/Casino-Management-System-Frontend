@@ -1,4 +1,5 @@
-const money = (value) => `NPR ${Number(value || 0).toLocaleString('en-IN')}`
+import { money } from '../../utils/pit'
+
 
 const staffName = (staff) => staff?.displayName || staff?.username || 'Not assigned'
 
