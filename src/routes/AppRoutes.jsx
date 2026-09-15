@@ -489,22 +489,22 @@ const AppRoutes = () => {
 
       <Route
         path="/crm-gre/hotel-bookings"
-        element={protectedPage(<CrmGreMarketing />)}
+        element={<Navigate to="/crm-gre" replace />}
       />
 
       <Route
         path="/crm-gre/services"
-        element={protectedPage(<CrmGreMarketing />)}
+        element={<Navigate to="/crm-gre" replace />}
       />
 
       <Route
         path="/crm-gre/vehicles"
-        element={protectedPage(<CrmGreMarketing />)}
+        element={<Navigate to="/crm-gre" replace />}
       />
 
       <Route
         path="/crm-gre/gifts"
-        element={protectedPage(<CrmGreMarketing />)}
+        element={<Navigate to="/crm-gre" replace />}
       />
 
       {/* =====================================================

@@ -1,3 +1,4 @@
+import { isCrmRoute } from '../../utils/crm'
 import { isMachineRoute } from '../../utils/machines'
 import { isPitRoute } from '../../utils/pit'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -11,6 +12,7 @@ const MainLayout = ({ children }) => {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isManagementDashboard = pathname === '/dashboard'
+  const isCrm = isCrmRoute(pathname)
   const isPit = isPitRoute(pathname)
   const isMachine = isMachineRoute(pathname)
   const isReconciliation = pathname === '/cashier/reconciliation'
@@ -41,7 +43,7 @@ const MainLayout = ({ children }) => {
 
       <div className="min-h-screen pl-[280px]">
         <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 border-b border-slate-200 bg-white px-6">
-          {isManagementDashboard || isBuyIn ? (
+          {isCrm ? <p className="text-sm font-bold text-slate-600">CRM / GRE</p> : isManagementDashboard || isBuyIn ? (
             <p className="text-sm font-bold text-slate-600">{isBuyIn ? 'Cash Collection & Buy-In' : 'Management overview'}</p>
           ) : isChipControl ? <p className="text-sm font-bold text-slate-600">Chip Control</p> : isCashOut ? <p className="text-sm font-bold text-slate-600">Cash-Out &amp; Losing Return</p> : isPit ? <p className="text-sm font-bold text-slate-600">Gaming Floor / Pit</p> : isMachine ? <p className="text-sm font-bold text-slate-600">Slot &amp; Machine Gaming</p> : isReconciliation ? <p className="text-sm font-bold text-slate-600">Cashier Reconciliation</p> : <>
           <button
@@ -66,7 +68,7 @@ const MainLayout = ({ children }) => {
           </>}
 
           <div className="ml-auto flex items-center gap-3">
-            {!isMachine && !isPit && !isReconciliation && !isCashOut && !isChipControl && !isManagementDashboard && !isBuyIn && !isReception && !isCustomerDirectory && <button
+            {!isCrm && !isMachine && !isPit && !isReconciliation && !isCashOut && !isChipControl && !isManagementDashboard && !isBuyIn && !isReception && !isCustomerDirectory && <button
               type="button"
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
             >

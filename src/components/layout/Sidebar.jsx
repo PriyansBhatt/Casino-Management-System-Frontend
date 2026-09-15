@@ -41,7 +41,7 @@ const sidebarSections = [
   {
     title: 'GUEST SERVICES',
     items: [
-      { label: 'CRM / GRE / Marketing', path: '/crm-gre', icon: '♡' },
+      { label: 'CRM / GRE', path: '/crm-gre', icon: '♡' },
       { label: 'F&B / Kitchen / Bar', path: '/fnb', icon: '🍴' },
     ],
   },
