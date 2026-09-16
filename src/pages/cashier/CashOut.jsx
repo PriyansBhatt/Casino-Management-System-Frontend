@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import PendingOperation from '../../components/ui/PendingOperation'
+import { useMemo, useEffect, useRef, useState } from 'react'
 import PageHeader from '../../components/layout/PageHeader'
 import Card from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
@@ -48,7 +49,7 @@ export default function CashOut() {
   const [confirmed, setConfirmed] = useState(null)
   const [confirmation, setConfirmation] = useState(null)
   const scopeGuard = useRef(requestGuard()), searchGuard = useRef(requestGuard()), selectionGuard = useRef(requestGuard()), quoteGuard = useRef(requestGuard())
-  const operation = useRef(createCashOutSubmission())
+  const operation = useMemo(() => ({ current: createCashOutSubmission(undefined, { actor: String(user?.id || user?.username || '') }) }), [user?.id, user?.username])
   const mounted = useRef(true)
   const locked = busy.post || Boolean(confirmation) || operation.current.uncertain
   const setLoading = (key, value) => setBusy((old) => ({ ...old, [key]: value }))
@@ -155,7 +156,8 @@ export default function CashOut() {
           : !selection.financial || !selection.custody ? 'Financial position or physical custody unavailable. Posting disabled.' : ''
 
   return <div className="space-y-5">
-    <PageHeader title="Cash-Out & Losing Return" description="Authoritative settlement control" />
+    <PendingOperation allowed={canPostCashOut(role)} store={operation.current.store} retry={confirm} changed={() => { setConfirmation(null); setError(''); refreshScope() }} />
+      <PageHeader title="Cash-Out & Losing Return" description="Authoritative settlement control" />
     <Card><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">Business Date: {scope?.date || 'Unavailable'}</p><p className="text-sm">{busy.scope ? 'Loading operational prerequisites…' : scope?.status ? `${scope.status.businessDateHealth} · ${scope.status.systemLocked ? 'System locked' : 'Settlement status loaded'}` : 'Operational status unavailable'}</p>
       <p className="text-sm">Reconciliation: {canPostCashOut(role) ? scope?.reconciliation?.lifecycleStatus || 'Unavailable' : 'Operator-specific prerequisite checked when posting'}</p></div>
       <Button variant="outline" disabled={locked || busy.scope} onClick={refreshScope}>Refresh authoritative data</Button></div>
@@ -211,7 +213,7 @@ export default function CashOut() {
       </Card>
       <History kind="return" rows={selection.returnHistory} loading={busy.selection || busy.post} error={selection.errors?.returnHistory} customer={selection.customer} session={selection.session} />
     </>}
-    {operation.current.uncertain && <p role="alert">Unconfirmed outcome: keep this page open. The frozen target and retry reference are retained.</p>}
+    {operation.current.uncertain && <p role="alert">Outcome uncertain: the original transaction is saved for explicit recovery after reload or navigation.</p>}
     <ConfirmDialog isOpen={Boolean(confirmation)} title={confirmation?.kind === 'cash' ? 'Confirm Cash-Out' : 'Confirm Losing Return'}
       description={confirmation ? `${confirmation.customerName} · Business Date ${confirmation.date} · ${money(confirmation.kind === 'cash' ? confirmation.payload.cashPaid : confirmation.quote)}. ${confirmation.kind === 'return' ? 'The backend recalculates and returns the actual payout.' : 'This does not close the visit.'} ${operation.current.uncertain ? 'Retry uses the same transaction reference.' : ''}` : ''}
       confirmLabel={operation.current.uncertain ? 'Retry unchanged transaction' : 'Post transaction'} isLoading={busy.post} onConfirm={confirm}

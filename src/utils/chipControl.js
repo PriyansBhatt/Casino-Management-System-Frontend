@@ -1,3 +1,4 @@
+import { durableCustody } from './durableSubmissions.js'
 import { DENOMINATIONS, requestGuard } from './buyIn.js'
 export { DENOMINATIONS, requestGuard }
 export const MOVEMENT_LABELS = {
@@ -130,7 +131,8 @@ export const recordedTime = (value) => typeof value === 'string' && /^\d{4}-\d{2
   ? `${value.replace('T', ' ')} (casino recorded time)` : 'Unavailable'
 
 // The logical operation includes date, direction and target, not just denomination quantities.
-export function createCustodySubmission(newKey = () => crypto.randomUUID()) {
+export function createCustodySubmission(newKey = () => crypto.randomUUID(), options) {
+  if (options) return durableCustody(options)
   let pending = false, signature = null, key = null, uncertain = false
   return {
     get pending() { return pending },

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import PendingOperation from '../../components/ui/PendingOperation'
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api/reconciliationApi'
 import useAuth from '../../hooks/useAuth'
 import { lifecycleAllows } from '../../utils/chipControl'
@@ -23,7 +24,7 @@ export default function CashierReconciliation() {
   const [warning, setWarning] = useState(''), [reopenReasons, setReopenReasons] = useState({})
   const loadGuard = useRef(requestGuard()), previewGuard = useRef(requestGuard())
   const lastScope = useRef(null), busy = useRef(false), mounted = useRef(true)
-  const submission = useRef(createReconciliationSubmission())
+  const submission = useMemo(() => ({ current: createReconciliationSubmission(undefined, { actor: String(user?.id || user?.username || '') }) }), [user?.id, user?.username])
 
   const load = useCallback(async (force = false) => {
     if (!force && (busy.current || submission.current.pending || submission.current.uncertain)) return
@@ -104,15 +105,15 @@ export default function CashierReconciliation() {
     if (!uncertain && (!operational || !scope.opening || !reviewed)) return
     busy.current = true; setWorking(true); setError(''); setWarning('')
     try {
-      await submission.current.run({ date: scope?.date, counts, remarks }, {
+      await submission.current.run({ date: scope?.date, counts, remarks, expectedReopenedAt: scope?.record?.reopenedAt }, {
         preflight: (target) => preflight(target.expectedBusinessDate), post: api.submit,
         success: (value) => { if (mounted.current) { setSuccess({ title: 'Reconciliation Submitted', value }); setPreview(null); setReviewed(false) } },
         refresh: () => load(true), warning: (text) => { if (mounted.current) setWarning(text) },
       })
     } catch (e) {
       if (mounted.current) {
-        setError(errorText(e))
-        if (!submission.current.uncertain) { setScope(null); setPreview(null); setCounts(emptyCounts()); setReviewed(false) }
+        if (!submission.current.uncertain) { setPreview(null); setCounts(emptyCounts()); setReviewed(false); try { await load(true) } catch { if (mounted.current) setWarning('Could not refresh reconciliation. Refresh before continuing.') } }
+        if (mounted.current) setError(errorText(e))
       }
     }
     finally { busy.current = false; if (mounted.current) setWorking(false) }
@@ -157,7 +158,8 @@ export default function CashierReconciliation() {
     finally { busy.current = false; if (mounted.current) setWorking(false) }
   }
 
-  return <div className="space-y-5">
+  return <div className="space-y-5"><PendingOperation allowed={canOperate(role)} store={submission.current.store} retry={submit} changed={() => { setError(''); load(true) }} />
+
     <header className="rounded-2xl bg-slate-950 p-5 text-white"><p className="text-xs font-bold uppercase text-amber-300">Cashier Operations</p><h1 className="text-3xl font-bold">Cashier Reconciliation</h1>
       <p className="mt-2">Business Date: {scope?.date || 'Unavailable'} · {canOperate(role) ? `Own cashier account: ${record?.cashierName || record?.cashierUsername || username || 'Unavailable'}` : 'Management review'}</p>
       <p className="mt-2">{scope?.status ? `${scope.status.businessDateHealth} · ${scope.status.systemLocked ? 'System Locked' : 'Backend status verified'}` : 'Operational status unavailable'}</p>
@@ -169,7 +171,6 @@ export default function CashierReconciliation() {
     {scope && Object.entries(scope.errors).map(([key,text]) => <p role="alert" key={key}>{key} unavailable: {text}</p>)}
     {success && <section role="status" className="rounded-xl bg-green-50 p-4"><strong>{success.title}</strong><p>Business Date {success.value.businessDate}{success.value.lifecycleStatus === 'SUBMITTED' && ` · ${resultLabel(success.value.status)} · Actual ${money(success.value.actualClosingCash)} · Variance ${money(success.value.variance)}`}</p></section>}
     {warning && <p role="alert" className="rounded bg-amber-50 p-3">{warning}</p>}
-    {uncertain && <section className="rounded-lg border border-amber-400 p-4"><p role="alert">Submission outcome unconfirmed. Keep this page open. Your frozen date, count and reference are retained; edits are disabled.</p><button className={button} disabled={working} onClick={submit}>Retry unchanged submission</button></section>}
 
     {canOperate(role) && <>
       <p className="rounded-xl bg-slate-100 p-4 font-semibold">Opening Cash + CASH Received − CASH Paid = Expected Closing<br />Actual Physical Cash − Expected Closing = Variance</p>

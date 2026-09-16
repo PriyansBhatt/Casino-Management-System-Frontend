@@ -1,3 +1,4 @@
+import { persistedOperation } from './persistedOperation.js'
 import { openDate, statusPayload, lifecycleAllows, validNumber } from './chipControl.js';
 export { lifecycleAllows };
 export { requestGuard } from './buyIn.js';
@@ -78,7 +79,27 @@ export const frozen = value => {
   return freeze(copy);
 };
 // Pending logical operations survive dialog/route unmounts. No authoritative read data is cached.
-export function createMutationStore(newKey = () => crypto.randomUUID(), storage = null, storageKey = 'pit-pending') {
+function durableMutationStore(actor, module, storage, legacyKey) {
+  const durable = persistedOperation({ module, actor: String(actor), storage, legacyKey })
+  let version = 0
+  durable.subscribe(() => { version++ })
+  return {
+    recovery: durable, subscribe: durable.subscribe, version: () => version,
+    get operation() { return durable.operation?.payload || null },
+    get pending() { return durable.pending }, get uncertain() { return Boolean(durable.operation) },
+    confirmRecovered() { durable.discard() },
+    async run(input, post, retry = false) {
+      if (retry && !durable.operation?.payload.idempotent) throw new Error('This operation requires a completion read.')
+      const key = retry ? durable.operation.operationKey : crypto.randomUUID()
+      const operation = retry ? durable.operation.payload : { ...input, payload: { ...input.payload, ...(input.idempotent ? { idempotencyKey: key } : {}) } }
+      // Do not ignore pending operations written by GP1/SM1 before I1B.
+      return durable.run({ operationType: operation.kind, operationKey: key, expectedBusinessDate: operation.payload.expectedBusinessDate || operation.date,
+        target: { tableId: operation.tableId, label: operation.machineCode }, payload: operation }, op => post(op.payload), { retry, clearDefiniteFailure: true })
+    },
+  }
+}
+export function createMutationStore(newKey = () => crypto.randomUUID(), storage = null, storageKey = 'pit-pending', actor = null) {
+  if (actor) return durableMutationStore(actor, storageKey.startsWith('machine') ? 'machines' : 'pit', storage, storageKey)
   let operation = null,
     pending = false,
     uncertain = false,
@@ -156,7 +177,7 @@ export function mutationStore(actor) {
   if (!stores.has(actor)) {
     let storage = null;
     try { storage = globalThis.sessionStorage } catch {}
-    stores.set(actor, createMutationStore(undefined, storage, `pit-pending:${actor}`));
+    stores.set(actor, createMutationStore(undefined, storage, `pit-pending:${actor}`, actor));
   }
   return stores.get(actor);
 }

@@ -1,3 +1,4 @@
+import { durableReconciliation } from './durableSubmissions.js'
 import { openDate, statusPayload, lifecycleAllows, validNumber, money, recordedTime } from './chipControl.js'
 export { money, recordedTime }
 export { requestGuard } from './buyIn.js'
@@ -97,7 +98,14 @@ export function frozenCount(date, counts, remarks, key) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Business Date unavailable.')
   return Object.freeze({ expectedBusinessDate: date, denominations: Object.freeze(noteCount(counts).denominations), remarks: remarks.trim() || null, idempotencyKey: key })
 }
-export function createReconciliationSubmission(newKey = () => crypto.randomUUID()) {
+export function createReconciliationSubmission(newKey = () => crypto.randomUUID(), options) {
+  if (options) return durableReconciliation(options, frozenCount, (value, date, payload) => {
+    reconciliation(value, date)
+    if (value.lifecycleStatus !== 'SUBMITTED' || value.calculationBasis !== 'SUBMITTED_SNAPSHOT'
+      || JSON.stringify(noteCount(value.denominations).denominations) !== JSON.stringify(payload.denominations)) {
+      throw new Error('Submitted count could not be verified. Retry Original; do not start a new submission.')
+    }
+  })
   let target = null, pending = false, uncertain = false
   return {
     get target() { return target }, get pending() { return pending }, get uncertain() { return uncertain },

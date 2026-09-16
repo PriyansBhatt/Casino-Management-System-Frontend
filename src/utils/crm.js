@@ -1,3 +1,4 @@
+import { assertActor } from './persistedOperation.js'
 export const CRM_TABS = ['Overview', 'Hotel Stays', 'Transport', 'Services & Gifts', 'All Records']
 export const canMutateCrm = (role) => role === 'SUPER_ADMIN'
 export const isCrmRoute = (path) => path === '/crm-gre' || path.startsWith('/crm-gre/') || path === '/crm' || path === '/crm-gre-marketing'
@@ -34,15 +35,34 @@ export function createSubmission(options = {}) {
  try { storage ??= globalThis.sessionStorage } catch { storage = null }
  const storageKey = `crm1-retries:${options.namespace || 'default'}`
  let memory = {}
- const read = () => storage ? JSON.parse(storage.getItem(storageKey) || '{}') : memory
- const write = records => { if (storage) storage.setItem(storageKey, JSON.stringify(records)); else memory = records }
+ const read = () => {
+  const records = storage ? JSON.parse(storage.getItem(storageKey) || '{}') : memory
+  if (!records || Array.isArray(records) || typeof records !== 'object' || Object.keys(records).length > 100) throw new Error('Invalid CRM recovery storage. No request was sent.')
+  for (const [signature, entry] of Object.entries(records)) {
+    const key = typeof entry === 'string' ? entry : entry?.key
+    const operation = JSON.parse(signature)
+    if (typeof operation.target !== 'string' || !operation.payload || typeof operation.payload !== 'object' || typeof key !== 'string' || !key || key.length > 100) throw new Error('Invalid CRM recovery storage. No request was sent.')
+  }
+  return records
+ }
+ const write = records => {
+  const raw = JSON.stringify(records)
+  if (Object.keys(records).length > 100 || raw.length > 128000) throw new Error('CRM recovery storage is full. Resolve pending operations before creating another record.')
+  if (storage) storage.setItem(storageKey, raw); else memory = records
+ }
  return {
-  begin(target, payload) {
+  pendingCreates() { return Object.entries(read()).map(([signature,entry]) => ({ ...JSON.parse(signature), signature, key: typeof entry === 'string' ? entry : entry.key, createdAt: typeof entry === 'string' ? null : entry.createdAt })).filter(p => p.target.startsWith('create:')) },
+  discard(signature) { if (busy) return; if (options.requireStorage) assertActor(String(options.namespace)); const pending = read(); delete pending[signature]; write(pending) },
+  begin(target, payload, retry = false) {
    if (busy) return null
    if (options.requireStorage && !storage) throw new Error('Browser retry storage is unavailable. No request was sent.')
+   if (options.requireStorage) assertActor(String(options.namespace))
    const signature = JSON.stringify({ target, payload }), pending = read()
-   const key = pending[signature] || globalThis.crypto.randomUUID()
-   pending[signature] = key
+   if (options.requireStorage && target.startsWith('create:') && Object.keys(pending).some(s => JSON.parse(s).target.startsWith('create:')) && !retry) throw new Error('A create request is uncertain. Retry Original or discard its local recovery record before starting a new record.')
+   if (retry && !pending[signature]) throw new Error('Saved CRM operation is unavailable.')
+   const previous = pending[signature]
+   const key = (typeof previous === 'string' ? previous : previous?.key) || globalThis.crypto.randomUUID()
+   pending[signature] = previous || { key, createdAt: new Date().toISOString() }
    write(pending) // Persist before sending; retain uncertain requests across unmount/remount.
    active = { signature, key }; busy = true
    return Object.freeze({ target, payload: Object.freeze({ ...payload }), key })
@@ -50,7 +70,7 @@ export function createSubmission(options = {}) {
   finish(confirmed) {
    busy = false
    if (confirmed && active) {
-    try { const pending = read(); if (pending[active.signature] === active.key) { delete pending[active.signature]; write(pending) } }
+    try { const pending = read(); if ((typeof pending[active.signature] === 'string' ? pending[active.signature] : pending[active.signature]?.key) === active.key) { delete pending[active.signature]; write(pending) } }
     catch { /* Retaining a confirmed key is safe: the backend will replay its receipt. */ }
    }
    active = null

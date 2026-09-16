@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 const source = fs.readFileSync(new URL('../src/utils/crm.js', import.meta.url), 'utf8')
-const u = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+const u = await import('../src/utils/crm.js')
 const page = fs.readFileSync(new URL('../src/pages/crm/CrmGreMarketing.jsx', import.meta.url),'utf8')
 const form = fs.readFileSync(new URL('../src/pages/crm/CrmRecordForm.jsx', import.meta.url),'utf8')
 const api = fs.readFileSync(new URL('../src/api/crmApi.js', import.meta.url),'utf8')

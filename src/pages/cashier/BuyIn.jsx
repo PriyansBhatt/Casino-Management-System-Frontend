@@ -1,3 +1,4 @@
+import PendingOperation from '../../components/ui/PendingOperation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useAuth from '../../hooks/useAuth'
 import cashierApi from '../../api/cashierApi'
@@ -39,7 +40,7 @@ export default function BuyIn() {
   const [page, setPage] = useState(1)
   const scopeGuard = useRef(requestGuard())
   const selectionGuard = useRef(requestGuard())
-  const submission = useRef(createBuyInSubmission())
+  const submission = useMemo(() => ({ current: createBuyInSubmission(undefined, { actor: String(user?.id || user?.username || '') }) }), [user?.id, user?.username])
   const date = scope.businessDate?.businessDate
   const available = !loading && !error && Boolean(date)
   const operational = available && !needsRefresh
@@ -50,7 +51,7 @@ export default function BuyIn() {
     selectionGuard.current.invalidate()
     setSelected(null); setVerified(null); setVerifying(false); setVerificationError('')
   }, [])
-  const refreshScope = useCallback(async () => {
+  const refreshScope = useCallback(async (propagateFailure = false) => {
     const current = scopeGuard.current.next()
     clearSelection()
     setScope(emptyScope()); setLoading(true); setError(''); setNeedsRefresh(false)
@@ -59,6 +60,7 @@ export default function BuyIn() {
       if (current()) { setScope(next); setWarning(''); setPage(1) }
     } catch (failure) {
       if (current()) setError(errorText(failure))
+      if (propagateFailure === true) throw failure
     } finally { if (current()) setLoading(false) }
   }, [role, clearSelection])
   useEffect(() => {
@@ -96,12 +98,13 @@ export default function BuyIn() {
     const current = scopeGuard.current.next()
     const customer = selected
     const capturedDate = date
-    const payload = { customerId: customer.id, customerSessionId: verified.id,
+    const payload = { expectedBusinessDate: capturedDate, currency: 'NPR', customerId: customer.id, customerSessionId: verified.id,
       amountReceived: Number(amount), paymentMode: mode, totalChipValueIssued: total,
       denominations: quantities, paymentReference: reference.trim() || null }
     setPending(true); setPostingError(''); setSuccess(''); setWarning('')
     try {
       await submission.current.run(payload, {
+        targetLabel: `${customer.customerCode} · ${customer.fullName}`,
         post: cashierApi.createBuyIn,
         onSuccess: (created) => {
           if (!current()) return
@@ -130,6 +133,14 @@ export default function BuyIn() {
     finally { setPending(false) }
   }
 
+  const retryOriginal = async () => {
+    setPending(true); setPostingError('')
+    try { await submission.current.run(null, { post: cashierApi.createBuyIn,
+      onSuccess: () => setSuccess('Chip Buy-In posted successfully. Do not repost.'),
+      refresh: () => refreshScope(true), onWarning: setWarning }, true) }
+    catch (e) { setPostingError(errorText(e)) } finally { setPending(false) }
+  }
+
   function exportCsv() {
     if (!operational || pending) return
     const blob = new Blob([buyInCsv(filtered, date)], { type: 'text/csv;charset=utf-8;' })
@@ -147,7 +158,8 @@ export default function BuyIn() {
     ['Machine Cash-In', 'Unavailable'], ['Tips Collected', 'Unavailable'],
   ]
 
-  return <div className="space-y-6">
+  return <div className="space-y-6"><PendingOperation allowed={writable} store={submission.current.store} retry={retryOriginal} changed={() => setPostingError('')} />
+
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="text-2xl font-bold">Cash Collection &amp; Buy-In</h1>
         <p className="text-slate-600">Persisted Chip Buy-In receipts · All cashiers</p>

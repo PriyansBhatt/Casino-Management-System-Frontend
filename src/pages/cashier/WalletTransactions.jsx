@@ -1,3 +1,4 @@
+import PendingOperation from '../../components/ui/PendingOperation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import cashierApi from '../../api/cashierApi'
 import chipCustodyApi from '../../api/chipCustodyApi'
@@ -52,7 +53,7 @@ const ChipControl = () => {
   const generation = useRef(requestGuard())
   const sessionGeneration = useRef(requestGuard())
   const tableGeneration = useRef(requestGuard())
-  const submission = useRef(createCustodySubmission())
+  const submission = useMemo(() => ({ current: createCustodySubmission(undefined, { actor: String(user?.id || user?.username || '') }) }), [user?.id, user?.username])
   const scopeRef = useRef(scope)
   scopeRef.current = scope
   const mounted = useRef(false)
@@ -147,6 +148,17 @@ const ChipControl = () => {
     const anchor = document.createElement('a'); anchor.href = url
     anchor.download = `chip-control-${businessDate}.csv`; anchor.click(); URL.revokeObjectURL(url)
   }
+  const retryOriginal = async () => {
+    setSubmitting(true)
+    try { await submission.current.run(null, { preflight: async () => {},
+      post: (value, key) => {
+        const payload = { denominations: value.denominations, idempotencyKey: key, ...(value.kind === 'OPENING' ? { expectedBusinessDate: value.date } : {}) }
+        if (value.kind === 'OPENING') return api.initializeCage(payload)
+        return value.mode === 'ISSUE' ? api.issueTableFloat(value.tableId, payload) : api.returnTableFloat(value.tableId, payload)
+      }, success: () => setFeedback({ type: 'success', message: 'Movement posted successfully. Do not repost.' }),
+      refresh: async () => { const result = await loadPage(); if (Object.keys(result.errors).length) throw new Error('Secondary refresh incomplete') }, warning: setWarning }, true) }
+    catch (e) { setFeedback({ type: 'error', message: e.message }) } finally { setSubmitting(false) }
+  }
   const submitMovement = async (kind) => {
     if (submission.current.pending || !ready || (kind === 'OPENING' ? !canInitialize || !canIssue || !cage || cage.initialized : !floatAllowed)) return
     let parsed
@@ -170,7 +182,7 @@ const ChipControl = () => {
           if (!lifecycleAllows(status, operation.mode === 'RETURN')) throw new Error('Backend operational status does not permit this movement. Refresh before continuing.')
         },
         post: (value, key) => {
-          const payload = { denominations: value.denominations, idempotencyKey: key }
+          const payload = { denominations: value.denominations, idempotencyKey: key, ...(value.kind === 'OPENING' ? { expectedBusinessDate: value.date } : {}) }
           if (value.kind === 'OPENING') return api.initializeCage(payload)
           return value.mode === 'ISSUE' ? api.issueTableFloat(value.tableId, payload) : api.returnTableFloat(value.tableId, payload)
         },
@@ -195,6 +207,7 @@ const ChipControl = () => {
   const submitFloat = () => submitMovement('FLOAT')
 
   return <div className="space-y-6 pb-12">
+      <PendingOperation allowed={submission.current.store.operation?.payload.kind === 'OPENING' ? canInitialize : canManageTableFloat} store={submission.current.store} retry={retryOriginal} changed={() => setFeedback(null)} />
     <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-600">Cash & Chips</p><h1 className="mt-1 text-3xl font-black text-slate-950">Chip Control</h1><p className="mt-2 text-sm text-slate-500">Authoritative physical custody and customer financial positions.</p></div>

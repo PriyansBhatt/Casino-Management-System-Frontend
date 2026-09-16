@@ -37,6 +37,22 @@ export const AuthProvider = ({ children }) => {
     initializeAuth()
   }, [])
 
+  useEffect(() => {
+    let reloading = false
+    const synchronize = (event) => {
+      if (reloading || event.storageArea !== window.localStorage) return
+      if (event.key !== null && !['auth_token', 'user_data'].includes(event.key)) return
+      reloading = true
+      const nextToken = tokenStorage.getToken(), nextUser = tokenStorage.getUser()
+      setToken(nextToken); setUser(nextUser); setIsAuthenticated(Boolean(nextToken && nextUser))
+      // Drop every mounted actor-scoped form/store when another tab changes authentication.
+      // Saved operations remain isolated in sessionStorage; nothing is automatically retried.
+      window.location.reload()
+    }
+    window.addEventListener('storage', synchronize)
+    return () => window.removeEventListener('storage', synchronize)
+  }, [])
+
   const login = async (credentials) => {
     setIsLoading(true)
     try {

@@ -48,7 +48,7 @@ const stores=new Map()
 export function machineMutationStore(actor) {
   if(!stores.has(actor)) {
     let storage;try {storage=globalThis.sessionStorage} catch {}
-    stores.set(actor,createMutationStore(undefined,storage,`machine-pending:${actor}`))
+    stores.set(actor,createMutationStore(undefined,storage,`machine-pending:${actor}`,actor))
   }
   return stores.get(actor)
 }

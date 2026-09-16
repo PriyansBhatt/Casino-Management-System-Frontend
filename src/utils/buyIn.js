@@ -1,3 +1,4 @@
+import { durableBuyIn } from './durableSubmissions.js'
 export const DENOMINATIONS = [500, 1000, 5000, 10000, 25000]
 export const PAYMENT_MODES = ['CASH', 'BANK', 'QR', 'CARD']
 export const canPostBuyIn = (role) => ['CASHIER', 'SUPER_ADMIN'].includes(role)
@@ -115,7 +116,8 @@ export function buyInCsv(records, date) {
 }
 
 // A synchronous lock covers POST and secondary refresh. Uncertain retries retain their key.
-export function createBuyInSubmission(newKey = () => globalThis.crypto.randomUUID()) {
+export function createBuyInSubmission(newKey = () => globalThis.crypto.randomUUID(), options) {
+  if (options) return durableBuyIn(options)
   let pending = false
   let signature = null
   let key = null

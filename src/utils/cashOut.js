@@ -1,3 +1,4 @@
+import { durableCashOut } from './durableSubmissions.js'
 import { matchingCustomers, verifySession, PAYMENT_MODES } from './buyIn.js'
 import { openDate, statusPayload, lifecycleAllows, validNumber, parseQuantities, inventoryPayload } from './chipControl.js'
 export { matchingCustomers, verifySession }
@@ -85,7 +86,8 @@ export function freezeLosingReturn(selection, scope, remarks) {
     payload: { customerId: selection.customer.id, customerSessionId: selection.session.id, remarks: remarks.trim() || null } }
 }
 // A frozen operation survives uncertain failures. Never exchange its target or key on retry.
-export function createCashOutSubmission(newKey = () => crypto.randomUUID()) {
+export function createCashOutSubmission(newKey = () => crypto.randomUUID(), options) {
+  if (options) return durableCashOut(options)
   let target = null, pending = false, attempted = false
   return {
     get target() { return target }, get pending() { return pending }, get uncertain() { return attempted },
