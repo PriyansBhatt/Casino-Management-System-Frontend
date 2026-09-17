@@ -1,3 +1,4 @@
+import { authoritativeTestMode, isDeferredTestRoute } from '../../utils/testEnvironment'
 import { NavLink } from 'react-router-dom'
 import useAuth from '../../hooks/useAuth'
 import { canAccessRoute } from '../../utils/accessControl'
@@ -53,6 +54,7 @@ const sidebarSections = [
       { label: 'Reports', path: '/reports', icon: '📊' },
       { label: 'Business Date', path: '/admin/business-date', icon: '📅' },
       { label: 'Settings', path: '/settings', icon: '⚙' },
+      ...(authoritativeTestMode ? [{ label: 'System Lock', path: '/admin/system-lock', icon: '🔒' }] : []),
     ],
   },
 ]
@@ -62,7 +64,7 @@ const Sidebar = () => {
   const visibleSections = sidebarSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => canAccessRoute(user, item.path)),
+      items: section.items.filter((item) => canAccessRoute(user, item.path) && (!authoritativeTestMode || !isDeferredTestRoute(item.path))),
     }))
     .filter((section) => section.items.length > 0)
 
@@ -123,7 +125,7 @@ const Sidebar = () => {
         </div>
 
         <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
-          V0.1 · Prototype Build
+          {authoritativeTestMode ? 'Authoritative system test' : 'V0.1 · Prototype Build'}
         </p>
       </div>
     </aside>

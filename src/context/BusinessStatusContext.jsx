@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import businessStatusApi from '../api/businessStatusApi'
 import useAuth from '../hooks/useAuth'
 import { useLocation } from 'react-router-dom'
@@ -11,8 +11,10 @@ export const BusinessStatusProvider = ({ children }) => {
   const [businessStatus, setBusinessStatus] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const generation = useRef(0)
 
   const refreshBusinessStatus = useCallback(async () => {
+    const request = ++generation.current
     if (!isAuthenticated) {
       setBusinessStatus(null)
       setError(null)
@@ -20,18 +22,22 @@ export const BusinessStatusProvider = ({ children }) => {
       return null
     }
     setIsLoading(true)
+    setBusinessStatus(null)
     setError(null)
 
     try {
       const status = await businessStatusApi.getBusinessStatus()
+      if (request !== generation.current) return null
       setBusinessStatus(status)
       return status
     } catch (err) {
+      if (request !== generation.current) return null
       const message = err.message || 'Failed to fetch business status'
+      setBusinessStatus(null)
       setError(message)
       return null
     } finally {
-      setIsLoading(false)
+      if (request === generation.current) setIsLoading(false)
     }
   }, [isAuthenticated])
 
@@ -41,6 +47,7 @@ export const BusinessStatusProvider = ({ children }) => {
       return
     }
     refreshBusinessStatus()
+    return () => { generation.current += 1 }
   }, [location.pathname, refreshBusinessStatus])
 
   const value = useMemo(
@@ -49,7 +56,7 @@ export const BusinessStatusProvider = ({ children }) => {
       isLoading,
       error,
       refreshBusinessStatus,
-      isSystemLocked: Boolean(businessStatus?.isLocked),
+      isSystemLocked: businessStatus ? businessStatus.isLocked : null,
     }),
     [businessStatus, error, isLoading, refreshBusinessStatus]
   )

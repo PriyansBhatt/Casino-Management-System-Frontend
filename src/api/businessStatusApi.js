@@ -33,7 +33,10 @@ export const businessStatusApi = {
     }
 
     const response = await axiosInstance.get('/business-status/current')
-    const status = response.data?.data || response.data
+    const status = response.data?.data
+    if (response.data?.success !== true || !status || typeof status.systemLocked !== 'boolean' || typeof status.businessDateOpen !== 'boolean' || (status.businessDateOpen && !/^\d{4}-\d{2}-\d{2}$/.test(status.businessDate || ''))) {
+      throw new Error('Authoritative Business Status unavailable.')
+    }
     return {
       ...status,
       isLocked: Boolean(status?.systemLocked),

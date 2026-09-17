@@ -1,3 +1,7 @@
+# Authoritative system testing
+
+Use [TEST_ENVIRONMENT.md](TEST_ENVIRONMENT.md) for current T0 startup and scope. Authoritative mode is the default; the legacy/demo notes below do not authorize mocks during final testing.
+
 # Casino Management System Frontend
 
 Frontend prototype for a role-based Casino Management System covering reception, cashier, pit/table operations, store/purchase, accounts, reports, audit logs, notifications, admin settings, and demo mode.

@@ -1,3 +1,5 @@
+import useBusinessStatus from '../../hooks/useBusinessStatus'
+import { authoritativeTestMode } from '../../utils/testEnvironment'
 import { isFnbRoute } from '../../utils/fnb'
 import { isCrmRoute } from '../../utils/crm'
 import { isMachineRoute } from '../../utils/machines'
@@ -10,6 +12,7 @@ import { isBuyInRoute } from '../../utils/buyIn'
 import { isCustomersRoute } from '../../utils/customersKyc'
 
 const MainLayout = ({ children }) => {
+  const { error: businessStatusError } = useBusinessStatus()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isManagementDashboard = pathname === '/dashboard'
@@ -45,7 +48,7 @@ const MainLayout = ({ children }) => {
 
       <div className="min-h-screen pl-[280px]">
         <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 border-b border-slate-200 bg-white px-6">
-          {isFnb ? <p className="text-sm font-bold text-slate-600">F&B / Kitchen / Bar</p> : isCrm ? <p className="text-sm font-bold text-slate-600">CRM / GRE</p> : isManagementDashboard || isBuyIn ? (
+          {authoritativeTestMode ? <p className="text-sm font-bold text-slate-600">Authoritative system test{businessStatusError && <span role="alert" className="ml-3 text-red-700">Business Status unavailable</span>}</p> : isFnb ? <p className="text-sm font-bold text-slate-600">F&B / Kitchen / Bar</p> : isCrm ? <p className="text-sm font-bold text-slate-600">CRM / GRE</p> : isManagementDashboard || isBuyIn ? (
             <p className="text-sm font-bold text-slate-600">{isBuyIn ? 'Cash Collection & Buy-In' : 'Management overview'}</p>
           ) : isChipControl ? <p className="text-sm font-bold text-slate-600">Chip Control</p> : isCashOut ? <p className="text-sm font-bold text-slate-600">Cash-Out &amp; Losing Return</p> : isPit ? <p className="text-sm font-bold text-slate-600">Gaming Floor / Pit</p> : isMachine ? <p className="text-sm font-bold text-slate-600">Slot &amp; Machine Gaming</p> : isReconciliation ? <p className="text-sm font-bold text-slate-600">Cashier Reconciliation</p> : <>
           <button
@@ -70,7 +73,7 @@ const MainLayout = ({ children }) => {
           </>}
 
           <div className="ml-auto flex items-center gap-3">
-            {!isFnb && !isCrm && !isMachine && !isPit && !isReconciliation && !isCashOut && !isChipControl && !isManagementDashboard && !isBuyIn && !isReception && !isCustomerDirectory && <button
+            {!authoritativeTestMode && !isFnb && !isCrm && !isMachine && !isPit && !isReconciliation && !isCashOut && !isChipControl && !isManagementDashboard && !isBuyIn && !isReception && !isCustomerDirectory && <button
               type="button"
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
             >

@@ -33,6 +33,8 @@ import PublicRoute from './PublicRoute'
 // ============================================================
 
 import MainLayout from '../components/layout/MainLayout'
+import TestScope from '../components/layout/TestScope'
+import { authoritativeTestMode } from '../utils/testEnvironment'
 
 // ============================================================
 // RECEPTION / CUSTOMERS
@@ -139,7 +141,7 @@ import DemoControlPanel from '../pages/demo/DemoControlPanel'
 
 const protectedPage = (page) => (
   <ProtectedRoute>
-    <MainLayout>{page}</MainLayout>
+    <MainLayout><TestScope>{page}</TestScope></MainLayout>
   </ProtectedRoute>
 )
 
@@ -707,7 +709,7 @@ const AppRoutes = () => {
 
       <Route
         path="/admin/system-lock"
-        element={protectedPage(<SystemLockSettings />)}
+        element={protectedPage(authoritativeTestMode ? <SystemSettings lockOnly /> : <SystemLockSettings />)}
       />
 
       <Route

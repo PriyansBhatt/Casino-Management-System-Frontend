@@ -1,3 +1,4 @@
+import { authoritativeTestMode } from '../utils/testEnvironment'
 import { createAuditLog } from '../api/auditApi'
 import { AUDIT_SEVERITY } from '../constants/auditConstants'
 
@@ -20,6 +21,9 @@ export async function logAuditEvent(payload) {
 }
 
 export async function safeLogAuditEvent(payload) {
+  // Legacy client audit submission has no supported backend write contract.
+  // Authoritative backend operations retain their own persisted auditing.
+  if (authoritativeTestMode) return null
   try {
     return await logAuditEvent(payload)
   } catch (error) {

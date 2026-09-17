@@ -13,7 +13,7 @@ import { ROLES } from '../../constants/roles'
 import systemLockApi from '../../api/systemLockApi'
 import { getErrorMessage } from '../../utils/errorUtils'
 
-const SystemSettings = () => {
+const SystemSettings = ({ lockOnly = false }) => {
   const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -59,8 +59,8 @@ const SystemSettings = () => {
       }
     }
 
-    loadSettings()
-  }, [reset])
+    if (!lockOnly) loadSettings()
+  }, [reset, lockOnly])
 
   const loadLockStatus = useCallback(async () => {
     if (!canManageSystemLock) {
@@ -155,9 +155,9 @@ const SystemSettings = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="System Settings" description="Configure global casino operating thresholds and feature flags." />
+      <PageHeader title={lockOnly ? "System Lock" : "System Settings"} description={lockOnly ? "Authoritative System Lock and emergency access." : "Configure global casino operating thresholds and feature flags."} />
 
-      <Card className="border-amber-200 bg-amber-50">
+      {!lockOnly && <Card className="border-amber-200 bg-amber-50">
         <p className="text-sm font-semibold text-amber-900">Losing return review rule</p>
         <p className="mt-1 text-sm text-amber-900">
           Losing return eligibility must be reviewed using net verified customer loss, not gross buy-in or recycled winnings.
@@ -166,7 +166,7 @@ const SystemSettings = () => {
           Example: If customer buys NPR 100,000, cashes out NPR 150,000, then buys in NPR 150,000 again and loses it,
           eligible net loss is NPR 100,000, not NPR 150,000.
         </p>
-      </Card>
+      </Card>}
 
       <Card>
         <div className="flex flex-col gap-3 border-b border-gray-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
@@ -203,7 +203,7 @@ const SystemSettings = () => {
         </>}
       </Card>
 
-      {isLoading && <Card><p className="text-sm text-gray-600">Loading settings...</p></Card>}
+      {!lockOnly && <>{isLoading && <Card><p className="text-sm text-gray-600">Loading settings...</p></Card>}
       {message && <Card className="border-green-200 bg-green-50"><p className="text-sm text-green-700">{message}</p></Card>}
       {error && <Card className="border-red-200 bg-red-50"><p className="text-sm text-red-700">{error}</p></Card>}
 
@@ -232,7 +232,7 @@ const SystemSettings = () => {
             </div>
           </form>
         </Card>
-      )}
+      )}</>}
     </div>
   )
 }
