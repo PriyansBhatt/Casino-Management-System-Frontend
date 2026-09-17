@@ -12,6 +12,6 @@ export function isDeferredTestRoute(path) {
   const root = decoded.toLowerCase().replace(/\/+$/, '') || '/'
   return ['/store','/procurement','/accounts','/analytics','/notifications','/demo','/testing','/audit-logs','/director'].some(prefix => root === prefix || root.startsWith(prefix + '/'))
     || root === '/settings'
-    || (root.startsWith('/admin/') && !['/admin/business-date','/admin/system-lock'].includes(root))
+    || (root.startsWith('/admin/') && !['/admin/business-date','/admin/system-lock','/admin/users'].includes(root))
     || (root.startsWith('/reports/') && root !== '/reports/running-funds')
 }
