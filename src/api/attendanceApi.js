@@ -1,32 +1,32 @@
+import { hrResponse } from '../utils/hrResponses'
 import axiosInstance from './axiosInstance'
 
 const options = { skipUnauthorizedRedirect: true }
-const unwrap = (response) => response.data?.data
 
 export const attendanceApi = {
-  checkIn: async () => unwrap(await axiosInstance.post('/attendance/check-in', undefined, options)),
+  checkIn: async () => hrResponse(await axiosInstance.post('/attendance/check-in', undefined, options), 'attendance'),
 
-  checkOut: async () => unwrap(await axiosInstance.post('/attendance/check-out', undefined, options)),
+  checkOut: async () => hrResponse(await axiosInstance.post('/attendance/check-out', undefined, options), 'attendance'),
 
-  getCurrent: async () => unwrap(await axiosInstance.get('/attendance/current', options)),
+  getCurrent: async () => hrResponse(await axiosInstance.get('/attendance/current', options), 'attendance', { nullable: true }),
 
-  getMyHistory: async (businessDate) => unwrap(await axiosInstance.get('/attendance/me', {
+  getMyHistory: async (businessDate) => hrResponse(await axiosInstance.get('/attendance/me', {
     ...options,
     params: businessDate ? { businessDate } : undefined,
-  })) || [],
+  }), 'attendance', { list: true, date: businessDate }),
 
-  getReport: async (businessDate) => unwrap(await axiosInstance.get('/attendance', {
+  getReport: async (businessDate) => hrResponse(await axiosInstance.get('/attendance', {
     ...options,
     params: { businessDate },
-  })) || [],
+  }), 'attendance', { list: true, date: businessDate }),
 
-  createAttendanceCorrection: async (attendanceId, payload) => unwrap(
+  createAttendanceCorrection: async (attendanceId, payload) => hrResponse(
     await axiosInstance.post(`/attendance/${attendanceId}/corrections`, payload, options)
-  ),
+  , 'correction', { target: attendanceId }),
 
-  getAttendanceCorrections: async (attendanceId) => unwrap(
+  getAttendanceCorrections: async (attendanceId) => hrResponse(
     await axiosInstance.get(`/attendance/${attendanceId}/corrections`, options)
-  ) || [],
+  , 'correction', { list: true, target: attendanceId }),
 }
 
 export default attendanceApi

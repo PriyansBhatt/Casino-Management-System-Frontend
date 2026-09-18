@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import useAuth from '../../hooks/useAuth'
+import useHrSafety, { hrActorKey } from '../../hooks/useHrSafety'
+import { freezeHrIntent } from '../../utils/hrSafety'
+import { useEffect, useState } from 'react'
 import hrApi from '../../api/hrApi'
 import PageHeader from '../../components/layout/PageHeader'
 import Button from '../../components/ui/Button'
@@ -9,6 +13,7 @@ import Loading from '../../components/ui/Loading'
 import useToast from '../../hooks/useToast'
 
 const inputClass = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100'
+const actionLabels = { createShiftDefinition: 'Create shift', updateShiftDefinition: 'Update shift', createRosterAssignment: 'Create assignment', updateRosterAssignment: 'Update assignment', cancelRosterAssignment: 'Cancel assignment' }
 const emptyShift = { code: '', name: '', description: '', startTime: '', endTime: '', crossesMidnight: false, lateGraceMinutes: 0, earlyCheckInMinutes: 0, active: true }
 const emptyRoster = { staffProfileId: '', shiftDefinitionId: '', rosterDate: '', remarks: '' }
 
@@ -31,6 +36,8 @@ const initialFilters = () => {
 
 const ShiftRosterManagement = () => {
   const { showToast } = useToast()
+  const safety = useHrSafety()
+  const [refreshWarning, setRefreshWarning] = useState('')
   const [tab, setTab] = useState('roster')
   const [shifts, setShifts] = useState([])
   const [staff, setStaff] = useState([])
@@ -45,33 +52,51 @@ const ShiftRosterManagement = () => {
   const [selected, setSelected] = useState(null)
   const [dialog, setDialog] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [confirmation, setConfirmation] = useState(null)
 
-  const loadReferenceData = useCallback(async () => {
+  const loadReferenceData = async () => {
+    if (!safety.live()) return
+    const current = safety.begin('references')
+    setRefreshWarning(''); setDialog(null); setConfirmation(null); setSelected(null)
     setReferenceLoading(true); setReferenceError('')
     try {
       const [shiftRows, staffRows, departmentRows] = await Promise.all([
         hrApi.getShiftDefinitions(), hrApi.getStaff(), hrApi.getDepartments(),
       ])
-      setShifts(shiftRows); setStaff(staffRows); setDepartments(departmentRows)
+      if (!current()) return
+      setShifts(shiftRows); setStaff(staffRows); setDepartments(departmentRows); return true
     } catch (error) {
+      if (!current()) return
       setShifts([]); setStaff([]); setDepartments([])
-      setReferenceError(error.message || 'Unable to load HR scheduling reference data.')
-    } finally { setReferenceLoading(false) }
-  }, [])
-
-  const loadRoster = useCallback(async (query = appliedFilters) => {
-    setRosterLoading(true); setRosterError('')
+      setReferenceError(error.message || 'Unable to load HR scheduling reference data.'); return false
+    } finally { if (current()) setReferenceLoading(false) }
+  }
+  const loadRoster = async (query = appliedFilters) => {
+    if (!safety.live()) return
+    const current = safety.begin('roster')
+    setRefreshWarning(''); setDialog(null); setConfirmation(null)
+    safety.invalidate('scope')
+    setRosterLoading(true); setRosterError(''); setRoster([]); setSelected(null)
     try {
       const rows = await hrApi.getRosterAssignments(query)
-      setRoster(rows)
-      setSelected((current) => current ? rows.find((row) => row.id === current.id) || null : null)
+      if (!current()) return
+      setRoster(rows); return true
     } catch (error) {
-      setRoster([]); setSelected(null)
-      setRosterError(error.message || 'Unable to load the authoritative staff roster.')
-    } finally { setRosterLoading(false) }
-  }, [appliedFilters])
-
+      if (!current()) return
+      setRosterError(error.message || 'Unable to load the authoritative staff roster.'); return false
+    } finally { if (current()) setRosterLoading(false) }
+  }
   useEffect(() => { void loadReferenceData(); void loadRoster(appliedFilters) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const changeFilters = next => {
+    safety.invalidate('roster', 'scope')
+    setRefreshWarning(''); setFilters(next); setAppliedFilters(next); setRoster([]); setSelected(null); setRosterLoading(false)
+    setRosterError('Apply filters to load the authoritative roster.'); setConfirmation(null); setDialog(null)
+  }
+  const changeTab = next => {
+    safety.invalidate('roster', 'references', 'scope')
+    setTab(next); setSelected(null); setDialog(null); setConfirmation(null)
+    void loadReferenceData(); void loadRoster(filters)
+  }
 
   const profileFor = (assignment) => staff.find((row) => row.staffProfileId === assignment.staff?.staffProfileId)
   const activeStaff = staff.filter((row) => row.employmentStatus === 'ACTIVE')
@@ -84,51 +109,51 @@ const ShiftRosterManagement = () => {
   } : { ...emptyRoster } })
   const change = (field, value) => setDialog((current) => ({ ...current, form: { ...current.form, [field]: value } }))
 
-  const save = async (event) => {
+  const save = event => {
     event.preventDefault()
-    if (saving) return
+    if (safety.pending) return
+    let payload, operation
     if (dialog.type === 'shift') {
-      if (dialog.form.startTime === dialog.form.endTime) {
-        showToast({ type: 'error', title: 'Invalid shift', message: 'Shift start and end times must be different.' })
-        return
+      const late = Number(dialog.form.lateGraceMinutes), early = Number(dialog.form.earlyCheckInMinutes)
+      if (dialog.form.startTime === dialog.form.endTime || !Number.isSafeInteger(late) || late < 0 || !Number.isSafeInteger(early) || early < 0) {
+        showToast({ type: 'error', title: 'Invalid shift', message: 'Use different start/end times and nonnegative whole grace minutes.' }); return
       }
-      if (Number(dialog.form.lateGraceMinutes) < 0 || Number(dialog.form.earlyCheckInMinutes) < 0) {
-        showToast({ type: 'error', title: 'Invalid shift', message: 'Shift grace values cannot be negative.' })
-        return
-      }
+      payload = { ...dialog.form, name: dialog.form.name.trim(), description: dialog.form.description.trim() || null, lateGraceMinutes: late, earlyCheckInMinutes: early }
+      if (!dialog.editing) payload.code = dialog.form.code.trim()
+      operation = dialog.editing ? 'updateShiftDefinition' : 'createShiftDefinition'
+    } else {
+      payload = { shiftDefinitionId: dialog.form.shiftDefinitionId, rosterDate: dialog.form.rosterDate, remarks: dialog.form.remarks.trim() || null }
+      if (!dialog.editing) payload.staffProfileId = dialog.form.staffProfileId
+      operation = dialog.editing ? 'updateRosterAssignment' : 'createRosterAssignment'
     }
-    setSaving(true)
-    try {
-      if (dialog.type === 'shift') {
-        const payload = { ...dialog.form, name: dialog.form.name.trim(), description: dialog.form.description.trim() || null,
-          lateGraceMinutes: Number(dialog.form.lateGraceMinutes), earlyCheckInMinutes: Number(dialog.form.earlyCheckInMinutes) }
-        if (dialog.editing) await hrApi.updateShiftDefinition(dialog.record.id, payload)
-        else await hrApi.createShiftDefinition({ ...payload, code: dialog.form.code.trim() })
-        await Promise.all([loadReferenceData(), loadRoster()])
-      } else {
-        const payload = { shiftDefinitionId: dialog.form.shiftDefinitionId, rosterDate: dialog.form.rosterDate, remarks: dialog.form.remarks.trim() || null }
-        if (dialog.editing) await hrApi.updateRosterAssignment(dialog.record.id, payload)
-        else await hrApi.createRosterAssignment({ ...payload, staffProfileId: dialog.form.staffProfileId })
-        await loadRoster()
-      }
-      setDialog(null)
-      showToast({ type: 'success', title: 'Schedule saved', message: 'The authoritative backend schedule has been refreshed.' })
-    } catch (error) {
-      showToast({ type: 'error', title: 'Unable to save schedule', message: error.message || 'The schedule could not be saved.' })
-    } finally { setSaving(false) }
+    const person = dialog.record?.staff || staff.find(row => row.staffProfileId === dialog.form.staffProfileId)
+    const shift = shifts.find(row => row.id === dialog.form.shiftDefinitionId)
+    const context = dialog.type === 'shift' ? `${payload.code || dialog.record.code} · ${payload.name} · ${payload.startTime}–${payload.endTime}`
+      : `${person?.fullName || person?.username || person?.employeeCode || 'Employee'} · ${payload.rosterDate} · ${shift?.code || payload.shiftDefinitionId}`
+    setConfirmation(freezeHrIntent({ operation, id: dialog.record?.id, payload, context }))
   }
-
-  const cancelRoster = async (event) => {
+  const cancelRoster = event => {
     event.preventDefault()
-    if (saving) return
-    setSaving(true)
-    try {
-      await hrApi.cancelRosterAssignment(dialog.record.id, { reason: dialog.form.reason.trim() })
-      setDialog(null); await loadRoster()
-      showToast({ type: 'success', title: 'Roster assignment cancelled', message: 'The cancelled assignment remains in authoritative history.' })
-    } catch (error) {
-      showToast({ type: 'error', title: 'Cancellation failed', message: error.message || 'The roster assignment could not be cancelled.' })
-    } finally { setSaving(false) }
+    if (safety.pending) return
+    setConfirmation(freezeHrIntent({ operation: 'cancelRosterAssignment', id: dialog.record.id, payload: { reason: dialog.form.reason.trim() },
+      context: `${dialog.record.staff?.fullName || dialog.record.staff?.username || 'Employee'} · ${dialog.record.rosterDate} · ${dialog.record.shift?.code || 'Shift unavailable'}` }))
+  }
+  const confirmMutation = () => {
+    const current = safety.capture('scope')
+    return safety.submit(confirmation, intent => intent.operation.startsWith('create')
+      ? hrApi[intent.operation](intent.payload) : hrApi[intent.operation](intent.id, intent.payload), {
+      busy: setSaving,
+      success: () => { setDialog(null); setConfirmation(null); setRefreshWarning(''); showToast({ type: 'success', title: 'Schedule updated', message: 'The requested schedule change was saved.' }) },
+      failure: error => showToast({ type: 'error', title: 'Schedule update failed', message: error.message || 'The schedule update was rejected.' }),
+      refresh: async () => {
+        if (!current()) return
+        const requests = [loadReferenceData(), loadRoster(filters)]
+        const referencesCurrent = safety.capture('references'), rosterCurrent = safety.capture('roster')
+        const results = await Promise.all(requests)
+        if (referencesCurrent() && rosterCurrent()) return !results.includes(false)
+      },
+      warning: () => setRefreshWarning('Schedule updated, but refreshed data could not be loaded.'),
+    })
   }
 
   const applyFilters = (event) => {
@@ -140,33 +165,35 @@ const ShiftRosterManagement = () => {
   }
 
   return <div className="space-y-6">
+    {refreshWarning && <p role="status" className="rounded border border-amber-300 bg-amber-50 p-3">{refreshWarning}</p>}
     <PageHeader title="Shift & Roster" description="Authoritative Kathmandu civil-time shift definitions and staff scheduling." />
-    <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm"><Tab active={tab === 'roster'} onClick={() => setTab('roster')}>Roster</Tab><Tab active={tab === 'shifts'} onClick={() => setTab('shifts')}>Shift Definitions</Tab></div>
+    <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm"><Tab active={tab === 'roster'} onClick={() => changeTab('roster')}>Roster</Tab><Tab active={tab === 'shifts'} onClick={() => changeTab('shifts')}>Shift Definitions</Tab></div>
 
     {referenceLoading && <Card><Loading message="Loading scheduling reference data..." size="sm" /></Card>}
     {!referenceLoading && referenceError && <ErrorState title="Scheduling data unavailable" description={referenceError} onRetry={loadReferenceData} />}
     {!referenceLoading && !referenceError && tab === 'shifts' && <ShiftList shifts={shifts} onCreate={() => openShiftDialog()} onEdit={openShiftDialog} />}
     {!referenceLoading && !referenceError && tab === 'roster' && <>
       <Card><form onSubmit={applyFilters} className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Field label="From Date"><input required type="date" value={filters.fromDate} onChange={(e) => setFilters({ ...filters, fromDate: e.target.value })} className={inputClass} /></Field>
-        <Field label="To Date"><input required type="date" value={filters.toDate} onChange={(e) => setFilters({ ...filters, toDate: e.target.value })} className={inputClass} /></Field>
-        <Field label="Staff"><select value={filters.staffProfileId} onChange={(e) => setFilters({ ...filters, staffProfileId: e.target.value })} className={inputClass}><option value="">All staff</option>{staff.map((row) => <option key={row.staffProfileId} value={row.staffProfileId}>{row.employeeCode} · {row.fullName || row.username}</option>)}</select></Field>
-        <Field label="Department"><select value={filters.departmentId} onChange={(e) => setFilters({ ...filters, departmentId: e.target.value })} className={inputClass}><option value="">All departments</option>{departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
-        <Field label="Shift"><select value={filters.shiftId} onChange={(e) => setFilters({ ...filters, shiftId: e.target.value })} className={inputClass}><option value="">All shifts</option>{shifts.map((row) => <option key={row.id} value={row.id}>{row.code} · {row.name}</option>)}</select></Field>
-        <Field label="Status"><select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className={inputClass}><option value="">All statuses</option><option>SCHEDULED</option><option>CANCELLED</option></select></Field>
+        <Field label="From Date"><input required type="date" value={filters.fromDate} onChange={(e) => changeFilters({ ...filters, fromDate: e.target.value })} className={inputClass} /></Field>
+        <Field label="To Date"><input required type="date" value={filters.toDate} onChange={(e) => changeFilters({ ...filters, toDate: e.target.value })} className={inputClass} /></Field>
+        <Field label="Staff"><select value={filters.staffProfileId} onChange={(e) => changeFilters({ ...filters, staffProfileId: e.target.value })} className={inputClass}><option value="">All staff</option>{staff.map((row) => <option key={row.staffProfileId} value={row.staffProfileId}>{row.employeeCode} · {row.fullName || row.username}</option>)}</select></Field>
+        <Field label="Department"><select value={filters.departmentId} onChange={(e) => changeFilters({ ...filters, departmentId: e.target.value })} className={inputClass}><option value="">All departments</option>{departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field>
+        <Field label="Shift"><select value={filters.shiftId} onChange={(e) => changeFilters({ ...filters, shiftId: e.target.value })} className={inputClass}><option value="">All shifts</option>{shifts.map((row) => <option key={row.id} value={row.id}>{row.code} · {row.name}</option>)}</select></Field>
+        <Field label="Status"><select value={filters.status} onChange={(e) => changeFilters({ ...filters, status: e.target.value })} className={inputClass}><option value="">All statuses</option><option>SCHEDULED</option><option>CANCELLED</option></select></Field>
         <div className="flex gap-2 md:col-span-3 xl:col-span-6 xl:justify-end"><Button type="submit" disabled={rosterLoading}>{rosterLoading ? 'Loading…' : 'Apply Filters'}</Button><Button type="button" onClick={() => openRosterDialog()} disabled={!activeStaff.length || !shifts.some((row) => row.active)}>Create Assignment</Button></div>
       </form></Card>
       {activeStaff.length === 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">No ACTIVE Staff Profiles are available for a new roster assignment.</div>}
       {!shifts.some((row) => row.active) && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">No ACTIVE Shift Definitions are available for a new roster assignment.</div>}
       {rosterLoading && <Card><Loading message="Loading authoritative roster..." size="sm" /></Card>}
       {!rosterLoading && rosterError && <ErrorState title="Roster unavailable" description={rosterError} onRetry={() => loadRoster()} />}
-      {!rosterLoading && !rosterError && <RosterList rows={roster} profileFor={profileFor} onView={setSelected} />}
+      {!rosterLoading && !rosterError && <RosterList rows={roster} profileFor={profileFor} onView={row => { safety.invalidate('scope'); setSelected(row) }} />}
     </>}
 
     {selected && <RosterDetail assignment={selected} profile={profileFor(selected)} onClose={() => setSelected(null)} onEdit={() => openRosterDialog(selected)} onCancel={() => setDialog({ type: 'cancel', record: selected, form: { reason: '' } })} />}
     {dialog?.type === 'shift' && <ShiftEditor dialog={dialog} saving={saving} onChange={change} onClose={() => setDialog(null)} onSubmit={save} />}
     {dialog?.type === 'roster' && <RosterEditor dialog={dialog} staff={activeStaff} shifts={shifts} saving={saving} onChange={change} onClose={() => setDialog(null)} onSubmit={save} />}
     {dialog?.type === 'cancel' && <CancelEditor dialog={dialog} saving={saving} onChange={change} onClose={() => setDialog(null)} onSubmit={cancelRoster} />}
+    <ConfirmDialog isOpen={!!confirmation} title="Confirm schedule change" description={confirmation ? `${actionLabels[confirmation.operation]} · ${confirmation.context}` : ''} isLoading={saving} onCancel={() => setConfirmation(null)} onConfirm={confirmMutation} />
   </div>
 }
 
@@ -193,4 +220,4 @@ const Header = ({ title, onClose }) => <div className="flex items-start justify-
 const Actions = ({ saving, onClose, action = 'Save', danger = false }) => <div className="mt-5 flex justify-end gap-3 border-t border-slate-200 pt-4 sm:col-span-2"><Button type="button" variant="outline" onClick={onClose} disabled={saving}>Back</Button><Button type="submit" variant={danger ? 'danger' : 'primary'} disabled={saving}>{saving ? 'Saving…' : action}</Button></div>
 const Overlay = ({ children }) => <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4"><div className="my-auto w-full max-w-4xl rounded-2xl bg-white p-6 shadow-2xl">{children}</div></div>
 
-export default ShiftRosterManagement
+export default function HrPage() { const { user } = useAuth(); return <ShiftRosterManagement key={hrActorKey(user)} /> }
