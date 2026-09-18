@@ -40,11 +40,11 @@ test('Business Status uses backend even with legacy mocks requested and rejects 
 test('deferred routes never return their prototype component; authoritative routes retain theirs',async()=>{
  const {TestScopeContent}=await bundle('src/components/layout/TestScope.jsx',testEnvironmentDefines({}))
  const child={prototype:'must not mount'}
- for(const path of ['/store/purchase','/accounts/bills','/analytics/management','/notifications','/demo/control-panel','/testing/checklist','/admin/roles','/admin/departments','/settings','/STORE/PURCHASE','/%73tore/purchase','/audit-logs','/audit-logs/id']){
+ for(const path of ['/store/purchase','/accounts/bills','/analytics/management','/notifications','/demo/control-panel','/testing/checklist','/admin/roles','/admin/departments','/settings','/STORE/PURCHASE','/%73tore/purchase','/audit-logs/id']){
   assert.equal(isDeferredTestRoute(path),true)
   const view=TestScopeContent({path,children:child});assert.notEqual(view,child);assert.match(JSON.stringify(view),/Deferred \/ Not available/)
  }
- for(const path of ['/dashboard','/reception','/customers','/cashier/buy-in','/chip-control','/cashier/cash-out','/cashier/reconciliation','/pit/tables','/slot-machines','/crm-gre','/fnb','/hr/roster','/reports/running-funds','/admin/business-date','/admin/system-lock','/admin/users','/Admin/Users/'])assert.equal(TestScopeContent({path,children:child}),child)
+ for(const path of ['/dashboard','/reception','/customers','/cashier/buy-in','/chip-control','/cashier/cash-out','/cashier/reconciliation','/pit/tables','/slot-machines','/crm-gre','/fnb','/hr/roster','/reports/running-funds','/admin/business-date','/admin/system-lock','/admin/users','/Admin/Users/','/audit-logs'])assert.equal(TestScopeContent({path,children:child}),child)
 })
 test('shared T0 header has real user identity and no fake shift, notification count or date',async()=>{
  const {default:Layout}=await bundle('src/components/layout/MainLayout.jsx',testEnvironmentDefines({}))

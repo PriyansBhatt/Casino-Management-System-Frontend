@@ -10,7 +10,8 @@ export function isDeferredTestRoute(path) {
   let decoded
   try { decoded = decodeURIComponent(path) } catch { return true }
   const root = decoded.toLowerCase().replace(/\/+$/, '') || '/'
-  return ['/store','/procurement','/accounts','/analytics','/notifications','/demo','/testing','/audit-logs','/director'].some(prefix => root === prefix || root.startsWith(prefix + '/'))
+  return ['/store','/procurement','/accounts','/analytics','/notifications','/demo','/testing','/director'].some(prefix => root === prefix || root.startsWith(prefix + '/'))
+    || root.startsWith('/audit-logs/') || root === '/audit' || root.startsWith('/audit/')
     || root === '/settings'
     || (root.startsWith('/admin/') && !['/admin/business-date','/admin/system-lock','/admin/users'].includes(root))
     || (root.startsWith('/reports/') && root !== '/reports/running-funds')

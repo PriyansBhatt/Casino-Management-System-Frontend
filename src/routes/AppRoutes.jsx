@@ -111,7 +111,6 @@ import AccountsReports from '../pages/accounts/AccountsReports'
 // ============================================================
 
 import AuditLogs from '../pages/audit/AuditLogs'
-import AuditLogDetails from '../pages/audit/AuditLogDetails'
 import ManagementAnalytics from '../pages/analytics/ManagementAnalytics'
 import RunningFundsReport from '../pages/reports/RunningFundsReport'
 
@@ -666,7 +665,7 @@ const AppRoutes = () => {
 
       <Route
         path="/audit-logs/:id"
-        element={protectedPage(<AuditLogDetails />)}
+        element={protectedPage(<Navigate to="/audit-logs" replace />)}
       />
 
       {/* =====================================================
