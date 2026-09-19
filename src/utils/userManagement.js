@@ -1,4 +1,4 @@
-export const USER_ROLES = Object.freeze(['SUPER_ADMIN', 'DIRECTOR', 'RECEPTIONIST', 'CASHIER', 'PIT_SUPERVISOR', 'DEALER'])
+export const USER_ROLES = Object.freeze(['SUPER_ADMIN', 'DIRECTOR', 'RECEPTIONIST', 'CASHIER', 'PIT_SUPERVISOR', 'DEALER', 'STORE_MANAGER', 'ACCOUNTANT_HEAD', 'ACCOUNTS_MANAGER'])
 export const knownRole = value => USER_ROLES.includes(value)
 export const knownStatus = value => typeof value === 'string' && ['ACTIVE', 'INACTIVE'].includes(value.toUpperCase())
 export const roleLabel = value => knownRole(value) ? value : 'Unknown'

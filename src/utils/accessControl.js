@@ -61,6 +61,9 @@ export function hasRole(user, roles) {
 }
 
 export function canAccessRoute(user, pathname) {
+  let canonical
+  try { canonical = decodeURIComponent(pathname).toLowerCase().replace(/\/+$/, '') } catch { return false }
+  if (canonical === '/accounts' || canonical.startsWith('/accounts/')) return ['/accounts', '/accounts/bills'].includes(canonical) && ['STORE_MANAGER','ACCOUNTANT_HEAD','ACCOUNTS_MANAGER','DIRECTOR'].includes(user?.role)
   if (!user) {
     return false
   }
@@ -99,6 +102,9 @@ export function getDefaultRouteForRole(role) {
       return '/store/department-requests'
     case ROLES.PROCUREMENT:
       return '/procurement/list'
+    case ROLES.STORE_MANAGER:
+    case ROLES.ACCOUNTANT_HEAD:
+    case ROLES.ACCOUNTS_MANAGER:
     case ROLES.ACCOUNTS:
       return '/accounts/bills'
     case ROLES.DEPARTMENT_HEAD:

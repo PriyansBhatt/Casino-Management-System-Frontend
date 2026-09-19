@@ -1,3 +1,4 @@
+import AccountsBills from '../pages/accounts/AccountsBills'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 // ============================================================
@@ -91,11 +92,6 @@ import StorePurchaseDashboard from '../pages/store/StorePurchaseDashboard'
 // ACCOUNTS
 // ============================================================
 
-import Bills from '../pages/accounts/Bills'
-import CashExpenses from '../pages/accounts/CashExpenses'
-import ChequePayments from '../pages/accounts/ChequePayments'
-import VendorPaymentHistory from '../pages/accounts/VendorPaymentHistory'
-import AccountsReports from '../pages/accounts/AccountsReports'
 
 // ============================================================
 // AUDIT / ANALYTICS
@@ -597,40 +593,9 @@ const AppRoutes = () => {
           ACCOUNTS
       ===================================================== */}
 
-      <Route
-        path="/accounts"
-        element={protectedPage(<AccountsReports />)}
-      />
-
-      <Route
-        path="/accounts/dashboard"
-        element={<Navigate to="/accounts" replace />}
-      />
-
-      <Route
-        path="/accounts/bills"
-        element={protectedPage(<Bills />)}
-      />
-
-      <Route
-        path="/accounts/cash-expenses"
-        element={protectedPage(<CashExpenses />)}
-      />
-
-      <Route
-        path="/accounts/cheque-payments"
-        element={protectedPage(<ChequePayments />)}
-      />
-
-      <Route
-        path="/accounts/vendor-payments"
-        element={protectedPage(<VendorPaymentHistory />)}
-      />
-
-      <Route
-        path="/accounts/reports"
-        element={protectedPage(<AccountsReports />)}
-      />
+      <Route path="/accounts" element={protectedPage(<AccountsBills />)} />
+      <Route path="/accounts/bills" element={protectedPage(<AccountsBills />)} />
+      <Route path="/accounts/*" element={protectedPage(<section><h1>Not available in AC1</h1><p>Payments, cheques, deposits, Day Book, Payables and Finance Reports are deferred.</p></section>)} />
 
       {/* =====================================================
           REPORTS & ANALYTICS

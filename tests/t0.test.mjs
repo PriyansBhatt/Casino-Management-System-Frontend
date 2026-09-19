@@ -40,7 +40,7 @@ test('Business Status uses backend even with legacy mocks requested and rejects 
 test('deferred routes never return their prototype component; authoritative routes retain theirs',async()=>{
  const {TestScopeContent}=await bundle('src/components/layout/TestScope.jsx',testEnvironmentDefines({}))
  const child={prototype:'must not mount'}
- for(const path of ['/store/unknown','/accounts/bills','/analytics/management','/notifications','/demo/control-panel','/testing/checklist','/admin/roles','/admin/departments','/settings','/audit-logs/id']){
+ for(const path of ['/store/unknown','/accounts/reports','/analytics/management','/notifications','/demo/control-panel','/testing/checklist','/admin/roles','/admin/departments','/settings','/audit-logs/id']){
   assert.equal(isDeferredTestRoute(path),true)
   const view=TestScopeContent({path,children:child});assert.notEqual(view,child);assert.match(JSON.stringify(view),/Deferred \/ Not available/)
  }

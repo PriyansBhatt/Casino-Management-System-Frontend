@@ -81,6 +81,7 @@ export const ROUTE_PERMISSIONS = {
   '/procurement/list': PROCUREMENT_ROLES,
   '/procurement/vendor-quotations': PROCUREMENT_ROLES,
   '/procurement/purchase-orders': PROCUREMENT_ROLES,
+  '/accounts': ACCOUNTS_ROLES,
   '/accounts/bills': ACCOUNTS_ROLES,
   '/accounts/cash-expenses': ACCOUNTS_ROLES,
   '/accounts/cheque-payments': ACCOUNTS_ROLES,

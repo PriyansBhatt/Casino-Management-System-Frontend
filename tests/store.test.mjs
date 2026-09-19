@@ -80,7 +80,7 @@ test('CSV uses only supplied authoritative page and protects formulas/quotes/new
 })
 test('Store promoted in T0, other unsupported routes stay deferred',()=>{
  for(const path of ['/store','/store/purchase','/store/dashboard','/procurement/list'])assert.equal(isDeferredTestRoute(path),false)
- for(const path of ['/store/unknown','/procurement/vendor-quotations','/procurement/purchase-orders','/accounts/bills'])assert.equal(isDeferredTestRoute(path),true)
+ for(const path of ['/store/unknown','/procurement/vendor-quotations','/procurement/purchase-orders','/accounts/reports'])assert.equal(isDeferredTestRoute(path),true)
 })
 async function bundle(entry){const result=await build({entryPoints:[entry],bundle:true,write:false,format:'esm',plugins:[{name:'store-boundary',setup(b){b.onResolve({filter:/axiosInstance$/},()=>({path:'axios',namespace:'sp1'}));b.onLoad({filter:/.*/,namespace:'sp1'},()=>({contents:'export default globalThis.__storeAxios'}))}}]});return import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'))}
 test('production API posts exact frozen payload and never loads prototype data',async()=>{
