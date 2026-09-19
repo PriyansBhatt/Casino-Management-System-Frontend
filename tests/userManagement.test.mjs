@@ -21,7 +21,7 @@ async function bundle(entry, ui=false) {
 }
 test('User Management remains authoritative under T0 and only SUPER_ADMIN allowed',async()=>{
  assert.equal(isDeferredTestRoute('/admin/users'),false)
- for(const path of ['/admin/roles','/admin/departments','/admin/permissions','/admin/system-settings','/settings','/accounts','/store','/analytics','/notifications','/demo'])assert.equal(isDeferredTestRoute(path),true)
+ for(const path of ['/admin/roles','/admin/departments','/admin/permissions','/admin/system-settings','/settings','/accounts','/store/unknown','/analytics','/notifications','/demo'])assert.equal(isDeferredTestRoute(path),true)
  for(const path of ['/admin/system-lock','/admin/business-date'])assert.equal(isDeferredTestRoute(path),false)
  const {canAccessRoute}=await bundle('src/utils/accessControl.js')
  for(const role of ['SUPER_ADMIN','DIRECTOR','RECEPTIONIST','CASHIER','PIT_SUPERVISOR','DEALER','ADMIN','MANAGER','AUDITOR'])assert.equal(canAccessRoute({role},'/admin/users'),role==='SUPER_ADMIN')

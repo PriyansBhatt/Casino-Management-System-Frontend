@@ -29,6 +29,7 @@ const CASHIER_RECONCILIATION_ROLES = [
 ]
 
 export const ROUTE_PERMISSIONS = {
+  '/store/purchase': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/dashboard': ALL_ROLES,
   '/slot-machines': [ROLES.SUPER_ADMIN, ROLES.DIRECTOR],
   '/attendance': ALL_ROLES,

@@ -80,21 +80,12 @@ import FnbKitchenBar from '../pages/fnb/FnbKitchenBar'
 // STORE
 // ============================================================
 
-import CreateDepartmentRequest from '../pages/store/CreateDepartmentRequest'
-import DeliveryReceive from '../pages/store/DeliveryReceive'
-import DepartmentConfirmation from '../pages/store/DepartmentConfirmation'
-import DepartmentRequests from '../pages/store/DepartmentRequests'
-import StockManagement from '../pages/store/StockManagement'
-import StoreReview from '../pages/store/StoreReview'
 import StorePurchaseDashboard from '../pages/store/StorePurchaseDashboard'
 
 // ============================================================
 // PROCUREMENT
 // ============================================================
 
-import ProcurementList from '../pages/procurement/ProcurementList'
-import PurchaseOrders from '../pages/procurement/PurchaseOrders'
-import VendorQuotations from '../pages/procurement/VendorQuotations'
 
 // ============================================================
 // ACCOUNTS
@@ -556,6 +547,12 @@ const AppRoutes = () => {
     STORE / PURCHASE
 ========================================================= */}
 
+<Route path="/store/department-requests" element={<Navigate to="/store/purchase" replace />} />
+<Route path="/store/requests/new" element={<Navigate to="/store/purchase" replace />} />
+<Route path="/store/review" element={<Navigate to="/store/purchase" replace />} />
+<Route path="/store/stock" element={<Navigate to="/store/purchase" replace />} />
+<Route path="/store/delivery-receive" element={<Navigate to="/store/purchase" replace />} />
+<Route path="/department/confirm-received" element={protectedPage(<section role="status">Deferred / Not available: department self-service is outside Store SP1.</section>)} />
 <Route
   path="/store/purchase"
   element={protectedPage(<StorePurchaseDashboard />)}
@@ -578,22 +575,22 @@ const AppRoutes = () => {
 
       <Route
         path="/procurement"
-        element={protectedPage(<ProcurementList />)}
+        element={<Navigate to="/store/purchase" replace />}
       />
 
       <Route
         path="/procurement/list"
-        element={protectedPage(<ProcurementList />)}
+        element={<Navigate to="/store/purchase" replace />}
       />
 
       <Route
         path="/procurement/vendor-quotations"
-        element={protectedPage(<VendorQuotations />)}
+        element={protectedPage(<section role="status" className="rounded border bg-white p-6"><h1>Deferred / Not available</h1><p>Quotations and formal purchase orders are outside Store SP1. No prototype records are loaded or saved.</p></section>)}
       />
 
       <Route
         path="/procurement/purchase-orders"
-        element={protectedPage(<PurchaseOrders />)}
+        element={protectedPage(<section role="status" className="rounded border bg-white p-6"><h1>Deferred / Not available</h1><p>Quotations and formal purchase orders are outside Store SP1. No prototype records are loaded or saved.</p></section>)}
       />
 
       {/* =====================================================
